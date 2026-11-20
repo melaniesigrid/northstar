@@ -226,7 +226,7 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
     outcome.attempts.push(attempt);
     if (!attempt.failure) {
       await commitStaged(worktree.path, commitMessage(task));
-      await removeWorktree(repoRoot, worktree);
+      await removeWorktree(repoRoot, worktree.path);
       return { ...outcome, status: "passed", worktreePath: undefined };
     }
     if (!attempt.failure.retryable) break;

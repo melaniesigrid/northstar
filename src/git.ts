@@ -32,8 +32,43 @@ export async function createWorktree(repoRoot: string, runId: string, baseRef: s
   return { path: worktreePath, branch };
 }
 
-export async function removeWorktree(repoRoot: string, worktree: Worktree): Promise<void> {
-  await git(repoRoot, ["worktree", "remove", "--force", worktree.path]);
+export async function removeWorktree(repoRoot: string, worktreePath: string): Promise<void> {
+  await git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
+}
+
+/** A scratch checkout on no branch, for reading history without touching the user's own checkout. */
+export async function createDetachedWorktree(repoRoot: string, id: string): Promise<string> {
+  const worktreePath = path.join(os.tmpdir(), "northstar", id);
+  await git(repoRoot, ["worktree", "add", "--detach", worktreePath, "HEAD"]);
+  return worktreePath;
+}
+
+export interface CommitInfo {
+  commit: string;
+  date: string;
+  subject: string;
+}
+
+/** The most recent non-merge commits that have a parent to compare against, newest first. */
+export async function listCommits(cwd: string, max: number): Promise<CommitInfo[]> {
+  const log = await git(cwd, ["log", "--no-merges", "--min-parents=1", `--max-count=${max}`, "--format=%h%x00%as%x00%s"]);
+  return log
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [commit = "", date = "", subject = ""] = line.split("\0");
+      return { commit, date, subject };
+    });
+}
+
+/**
+ * Puts the worktree in the state a change is in just before it is committed:
+ * the commit's content staged on top of its parent. The slop checks can then
+ * read a past commit exactly as they read a fresh change.
+ */
+export async function restageCommit(cwd: string, commit: string): Promise<void> {
+  await git(cwd, ["checkout", "--quiet", "--detach", "--force", commit]);
+  await git(cwd, ["reset", "--quiet", "--soft", `${commit}^`]);
 }
 
 export async function stageAll(cwd: string): Promise<void> {

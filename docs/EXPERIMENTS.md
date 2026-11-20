@@ -11,6 +11,37 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Audit command, checked against the earlier replay
+
+**Question.** Does `northstar audit` give the same answers as the throwaway replay script it replaces, and is it safe to run in a real checkout?
+
+**Method.** Ran the command on the five repos replayed earlier and on NorthStar itself, then compared blocked counts. Tests check that the user's HEAD, working tree, and worktree list are unchanged afterwards.
+
+**Result.** The counts match the replay on every repo.
+
+| Repo | Commits | Blocked | Duplicated lines per 1,000 added |
+| --- | --- | --- | --- |
+| typecase | 12 | 1 | 0.0 |
+| quant-harness | 3 | 1 | 7.6 |
+| shipshape-platform | 9 | 1 | 2.6 |
+| DueBook | 9 | 0 | 0.0 |
+| ZipQuarry | 32 | 0 | 0.0 |
+| NorthStar | 5 | 0 | 0.0 |
+
+The rates are per 1,000 added lines of source, so repos of different sizes can be compared. This is the first form of the slop score. It is a set of rates, not one number, because nothing yet justifies how to weigh them against each other.
+
+**Next.** Use the audit as the benchmark's measuring tool: score a raw agent's branch and the pipeline's branch for the same task.
+
+## 2026-11-20: Weak test check on 215 real tests
+
+**Question.** Does a check for tests that assert nothing, or only that a value exists, flag honest tests by mistake?
+
+**Method.** The check reads each added test in JavaScript, TypeScript, and Python, takes the lines indented under it, and looks for assertions. Ran it through the audit over quant-harness, shipshape-platform, and NorthStar, which hold 215 tests between them.
+
+**Result.** It recognized all 215 tests and flagged none. So no false positives on this sample, and also no true positives: these repos have no weak tests of the kinds it looks for, which means the check's ability to catch real ones is shown only by unit tests. It reports to the reviewer and does not block.
+
+**Next.** It needs a repo that has weak tests. Published research found strong checks in only 18% of the new test files Codex writes, so raw Codex output on the benchmark tasks is the place to look.
+
 ## 2026-11-20: The adapter's arguments against the real Codex CLI
 
 **Question.** Does Codex accept the exact arguments the adapter builds, and does its event stream look the way the parser assumes?
