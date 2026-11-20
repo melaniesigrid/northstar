@@ -11,6 +11,16 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Benchmark runner built, not yet run live
+
+**Question.** Can the central claim be tested with one command: that the pipeline produces cleaner code than the same writer working alone?
+
+**Method.** Built `northstar bench`. For each task it starts two runs from the same commit. The first gives the writer the task and nothing else, one shot. The second sends the task through the pipeline. Both are scored by the same gates and slop checks, and the report puts tokens, cost, and time beside the quality columns. Wrote five seed tasks against NorthStar's own code, pinned to one commit, each near code worth reusing and one that a raw agent should handle well.
+
+**Result.** The runner is tested with scripted agents on real git repos: a writer that copies a helper is scored as not clean when alone and clean after the pipeline rejects the copy and it fixes it. That shows the runner measures what it should. It says nothing about real agents.
+
+**Next.** Run it with Codex as the writer. Things to look for beyond the headline: whether the planner pays for itself, how many attempts tasks take, what the pipeline costs per task compared with the writer alone, and whether the weak test and unreferenced symbol signals fire on raw Codex output.
+
 ## 2026-11-20: Audit command, checked against the earlier replay
 
 **Question.** Does `northstar audit` give the same answers as the throwaway replay script it replaces, and is it safe to run in a real checkout?

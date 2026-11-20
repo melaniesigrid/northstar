@@ -1,0 +1,1 @@
+Add a `--since <git ref>` option to `northstar audit` that audits only the commits made after that ref. `--commits` still caps how many are audited. Add tests, and document the option in the usage text and the README.

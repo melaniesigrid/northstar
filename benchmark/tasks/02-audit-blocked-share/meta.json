@@ -1,0 +1,4 @@
+{
+  "baseCommit": "ec43c705ef1776a9560099a94c94fc48a2b27881",
+  "notes": "One line in renderAudit. Watch for changes outside src/audit.ts and its test, and for a second rounding helper next to perThousandLines."
+}

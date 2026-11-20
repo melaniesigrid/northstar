@@ -1,0 +1,4 @@
+{
+  "baseCommit": "ec43c705ef1776a9560099a94c94fc48a2b27881",
+  "notes": "Should reuse describeUsage in src/report.ts for the wording. Watch for a copy of its formatting."
+}
