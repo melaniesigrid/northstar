@@ -1,4 +1,5 @@
 import { FINDING_RULES, type Finding, type FindingRule } from "./types.js";
+import type { UnreferencedSymbol } from "./unreferenced.js";
 
 const MAX_DIFF_CHARS = 60_000;
 
@@ -14,7 +15,13 @@ const OUTPUT_FORMAT = `Reply with one JSON object and nothing else:
 {"findings": [{"severity": "blocking" | "advisory", "rule": "<one of the six rules>", "file": "<path>", "line": <number>, "explanation": "<one or two sentences a human can verify>", "suggestedFix": "<optional>"}]}
 Use "blocking" only for problems a careful human reviewer would refuse to merge. Return {"findings": []} when the diff is clean.`;
 
-export function buildReviewPrompt(task: string, diff: string): string {
+function describeUnreferenced(symbols: UnreferencedSymbol[]): string | undefined {
+  if (symbols.length === 0) return undefined;
+  const list = symbols.map((symbol) => `- ${symbol.file}:${symbol.line} ${symbol.name}`).join("\n");
+  return `An automated check found new symbols whose names appear nowhere else in the repo. Verify each one. If it is truly unused, and is not an entry point or public API, report it as a blocking "scope" finding:\n${list}`;
+}
+
+export function buildReviewPrompt(task: string, diff: string, unreferenced: UnreferencedSymbol[] = []): string {
   const shownDiff =
     diff.length <= MAX_DIFF_CHARS
       ? diff
@@ -23,9 +30,12 @@ export function buildReviewPrompt(task: string, diff: string): string {
     "You are reviewing a change written by another coding agent. You did not write it. Do not edit any files.",
     `The task was:\n${task}`,
     RUBRIC,
+    describeUnreferenced(unreferenced),
     OUTPUT_FORMAT,
     `The staged diff:\n${shownDiff}`,
-  ].join("\n\n");
+  ]
+    .filter((section) => section !== undefined)
+    .join("\n\n");
 }
 
 export type ReviewOutcome = { ok: true; findings: Finding[] } | { ok: false; reason: string };

@@ -1,6 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { listTrackedFiles, stagedAddedLines } from "./git.js";
+import type { ChangeSnapshot } from "./snapshot.js";
 
 export interface Clone {
   file: string;
@@ -26,11 +24,6 @@ interface WindowLocation {
   file: string;
   index: number;
 }
-
-const MAX_FILE_BYTES = 512 * 1024;
-const DATA_AND_PROSE_EXTENSIONS = new Set([
-  ".md", ".mdx", ".txt", ".json", ".lock", ".yaml", ".yml", ".toml", ".csv", ".svg", ".snap",
-]);
 
 // Lines that repeat across files for good reasons and say nothing about copy-paste.
 const COMMENT = /^(\/\/|\/\*|\*|#[ !]|<!--)/;
@@ -60,11 +53,7 @@ function windowKey(lines: SourceLine[], index: number, size: number): string {
  * entirely of added lines count, so duplication that existed before the change
  * is never held against it: the rule is "add no new debt".
  */
-export function findClones(
-  files: Map<string, string>,
-  addedLines: Map<string, Set<number>>,
-  minLines: number,
-): DuplicationResult {
+export function findClones({ files, addedLines }: ChangeSnapshot, minLines: number): DuplicationResult {
   const sources = new Map<string, SourceLine[]>();
   const windows = new Map<string, WindowLocation[]>();
   for (const [file, content] of files) {
@@ -117,23 +106,6 @@ export function findClones(
     }
   }
   return result;
-}
-
-async function readSource(file: string): Promise<string | undefined> {
-  const content = await readFile(file).catch(() => undefined);
-  if (!content || content.length > MAX_FILE_BYTES || content.includes(0)) return undefined;
-  return content.toString("utf8");
-}
-
-/** Checks the staged change in `cwd` against every tracked source file. */
-export async function checkDuplication(cwd: string, minLines: number): Promise<DuplicationResult> {
-  const files = new Map<string, string>();
-  for (const file of await listTrackedFiles(cwd)) {
-    if (DATA_AND_PROSE_EXTENSIONS.has(path.extname(file))) continue;
-    const content = await readSource(path.join(cwd, file));
-    if (content !== undefined) files.set(file, content);
-  }
-  return findClones(files, await stagedAddedLines(cwd), minLines);
 }
 
 export function formatClones(clones: Clone[]): string {

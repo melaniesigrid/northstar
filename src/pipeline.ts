@@ -1,4 +1,3 @@
-import { checkDuplication, formatClones, type DuplicationResult } from "./duplication.js";
 import { exec, tail } from "./exec.js";
 import { runGate, type GateResult } from "./gates.js";
 import {
@@ -11,6 +10,7 @@ import {
   stagedStat,
 } from "./git.js";
 import { buildReviewPrompt, formatFindings, parseFindings } from "./review.js";
+import { checkSlop, describeBlockingSlop, type SlopReport } from "./slop.js";
 import type { AgentAdapter, Config, Finding, Usage } from "./types.js";
 
 export interface PipelineInput {
@@ -34,8 +34,8 @@ export interface Attempt {
   number: number;
   filesChanged: string[];
   linesChanged: number;
-  /** Absent when the attempt stopped before the duplication check. */
-  duplication?: DuplicationResult;
+  /** Absent when the attempt stopped before the slop checks. */
+  slop?: SlopReport;
   gates: GateResult[];
   findings: Finding[];
   writerUsage?: Usage;
@@ -119,13 +119,9 @@ async function runAttempt(
     );
   }
 
-  attempt.duplication = await checkDuplication(cwd, config.minDuplicateLines);
-  if (attempt.duplication.clones.length > 0) {
-    return fail(
-      "slop",
-      `New code repeats code the repo already has. Reuse or extract the original instead:\n${formatClones(attempt.duplication.clones)}`,
-    );
-  }
+  attempt.slop = await checkSlop(cwd, config);
+  const blockingSlop = describeBlockingSlop(attempt.slop, config);
+  if (blockingSlop) return fail("slop", blockingSlop);
 
   for (const gate of config.gates) {
     const result = await runGate(gate, cwd, config.gateTimeoutMs);
@@ -140,7 +136,7 @@ async function runAttempt(
   }
 
   const reviewed = await input.reviewer.run({
-    prompt: buildReviewPrompt(input.task, await stagedDiff(cwd)),
+    prompt: buildReviewPrompt(input.task, await stagedDiff(cwd), attempt.slop.unreferenced),
     cwd,
     model: config.reviewerModel,
     readOnly: true,

@@ -7,6 +7,7 @@ const DEFAULTS = {
   maxIterations: 3,
   maxChangedLines: 400,
   minDuplicateLines: 5,
+  maxNewSuppressions: 0,
   agentTimeoutMs: 15 * 60_000,
   gateTimeoutMs: 5 * 60_000,
 };
@@ -25,10 +26,10 @@ function optionalString(raw: RawConfig, key: string): string | undefined {
   return raw[key] === undefined ? undefined : requireString(raw, key);
 }
 
-function positiveInteger(raw: RawConfig, key: keyof typeof DEFAULTS): number {
+function integerAtLeast(minimum: number, raw: RawConfig, key: keyof typeof DEFAULTS): number {
   const value = raw[key] ?? DEFAULTS[key];
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-    throw new Error(`Config: "${key}" must be a positive integer.`);
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum) {
+    throw new Error(`Config: "${key}" must be a whole number, ${minimum} or more.`);
   }
   return value;
 }
@@ -66,13 +67,14 @@ export function parseConfig(raw: unknown): Config {
     reviewer: requireString(config, "reviewer"),
     writerModel: optionalString(config, "writerModel"),
     reviewerModel: optionalString(config, "reviewerModel"),
-    maxIterations: positiveInteger(config, "maxIterations"),
-    maxChangedLines: positiveInteger(config, "maxChangedLines"),
-    minDuplicateLines: positiveInteger(config, "minDuplicateLines"),
+    maxIterations: integerAtLeast(1, config, "maxIterations"),
+    maxChangedLines: integerAtLeast(1, config, "maxChangedLines"),
+    minDuplicateLines: integerAtLeast(1, config, "minDuplicateLines"),
+    maxNewSuppressions: integerAtLeast(0, config, "maxNewSuppressions"),
     setup: parseSetup(config.setup),
     gates: parseGates(config.gates),
-    agentTimeoutMs: positiveInteger(config, "agentTimeoutMs"),
-    gateTimeoutMs: positiveInteger(config, "gateTimeoutMs"),
+    agentTimeoutMs: integerAtLeast(1, config, "agentTimeoutMs"),
+    gateTimeoutMs: integerAtLeast(1, config, "gateTimeoutMs"),
   };
 }
 

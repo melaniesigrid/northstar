@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ChangeSnapshot } from "../src/snapshot.js";
 import type { AgentAdapter, Config, RunResult, RunSpec } from "../src/types.js";
 
 export function gitIn(cwd: string, ...args: string[]): string {
@@ -32,6 +33,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     maxIterations: 3,
     maxChangedLines: 400,
     minDuplicateLines: 5,
+    maxNewSuppressions: 0,
     setup: [],
     gates: [{ name: "exists", command: "test -f feature.txt" }],
     agentTimeoutMs: 10_000,
@@ -68,6 +70,17 @@ export function writeFileTurn(file: string, content: string): Turn {
     writeFileSync(path.join(spec.cwd, file), content);
     return "done";
   };
+}
+
+/** A snapshot of `files` in which every line of the named files was added by the change. */
+export function snapshotWithAdded(files: Record<string, string>, ...addedFiles: string[]): ChangeSnapshot {
+  const addedLines = new Map(
+    addedFiles.map((name) => {
+      const lineCount = (files[name] ?? "").split("\n").length;
+      return [name, new Set(Array.from({ length: lineCount }, (_, index) => index + 1))] as const;
+    }),
+  );
+  return { files: new Map(Object.entries(files)), addedLines };
 }
 
 export const CLEAN_REVIEW: Turn = () => '{"findings": []}';

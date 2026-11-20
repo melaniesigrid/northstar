@@ -10,11 +10,13 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 
 | Built | Not built yet |
 | --- | --- |
-| Isolated git worktree per run | Dead code and complexity checks |
+| Isolated git worktree per run | Complexity check |
 | Claude Code and Codex adapters behind one interface | Repo convention profile and reuse search |
 | Setup commands and configurable hard gates | Slop score and benchmark |
 | Line budget check | Writer rebuttal round |
 | Duplication gate | Pull request creation |
+| Suppression gate | |
+| Unreferenced symbol signal for the reviewer | |
 | Cross-vendor review with structured findings | |
 | Retry loop with exact feedback, capped attempts | |
 | Run report and JSON audit log | |
@@ -27,7 +29,7 @@ The adapters are checked against each CLI's documented flags and output, and the
 2. Setup commands run once, for example `npm ci`.
 3. The writer agent makes the change.
 4. The change is staged and checked against the line budget.
-5. The duplication gate compares the added code with the rest of the repo.
+5. The built-in slop checks run on the added code: duplication, new suppressions, and unreferenced symbols.
 6. Each configured gate runs in order. A gate is any command that exits 0 on success.
 7. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
 8. A failed check or a blocking finding goes back to the writer with the exact reason.
@@ -35,7 +37,17 @@ The adapters are checked against each CLI's documented flags and output, and the
 
 A review that cannot be parsed is never treated as a pass.
 
-## Duplication gate
+## Slop checks
+
+Three checks run on every change before any configured gate. They need no setup and no extra dependencies, and they only ever look at lines the change added. Code that was already in the repo is never held against a change.
+
+| Check | Catches | Outcome |
+| --- | --- | --- |
+| Duplication | Copy-pasted blocks | Blocks the change |
+| Suppressions | New `as any`, `@ts-ignore`, `eslint-disable` and similar | Blocks past `maxNewSuppressions` |
+| Unreferenced symbols | New top-level names nothing else uses | Passed to the reviewer to verify |
+
+### Duplication
 
 The gate blocks added code that repeats code already in the repo, and tells the writer where the original lives:
 
@@ -53,6 +65,21 @@ How it decides:
 - Prose and data files (Markdown, JSON, YAML, lockfiles and similar) are not checked.
 
 Limits: matching is textual, so a copy with renamed variables gets through. Catching those is the reviewer's job for now.
+
+### Suppressions
+
+Silencing a check is the cheapest way for an agent to make a gate pass. This check counts the escape hatches a change adds and blocks it when the count is over `maxNewSuppressions` (default 0):
+
+- Comment directives: `eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `@ts-nocheck`, `biome-ignore`, `# type: ignore`, `# noqa`, `nolint`, `rubocop:disable`
+- TypeScript escapes: `as any`, `: any`, and `any` as a type argument
+
+Text inside string literals and prose inside comments is ignored, so an error message that says "Expected: any of..." does not count.
+
+### Unreferenced symbols
+
+For each new top-level function, constant, class, or type, the check looks for the name anywhere else in the repo. A name that appears only at its own declaration is likely dead code, but it could also be a public API or something a framework finds by convention. So this check never blocks on its own. It gives the reviewer the list and asks for a blocking finding only where the symbol is truly unused.
+
+Default exports, `main`, and test functions are skipped.
 
 ## Quick start
 
@@ -102,6 +129,7 @@ Exit codes: `0` the change passed and is committed on its branch, `1` a human ne
 | `maxIterations` | no | `3` | Writer attempts before a human takes over |
 | `maxChangedLines` | no | `400` | Line budget for one change |
 | `minDuplicateLines` | no | `5` | Length of a repeated block that counts as a clone |
+| `maxNewSuppressions` | no | `0` | New lint or type suppressions a change may add |
 | `agentTimeoutMs` | no | `900000` | Time limit for one agent turn |
 | `gateTimeoutMs` | no | `300000` | Time limit for one gate or setup command |
 
