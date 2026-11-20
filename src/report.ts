@@ -54,6 +54,8 @@ export function renderReport(outcome: RunOutcome): string {
     `Review: ${review}.`,
   ];
   if (outcome.setupFailure) sections.push(outcome.setupFailure);
+  if (outcome.plan) sections.push(`Plan given to the writer:\n${outcome.plan}`);
+  if (outcome.planFailure) sections.push(`No plan was made. ${outcome.planFailure}`);
   if (outcome.suggestedHelpers.length > 0) {
     sections.push(`Existing helpers pointed out to the writer:\n${formatHelpers(outcome.suggestedHelpers)}`);
   }

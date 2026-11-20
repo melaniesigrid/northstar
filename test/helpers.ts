@@ -31,6 +31,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
   return {
     writer: "fake-writer",
     reviewer: "fake-reviewer",
+    writerConventions: "notes",
     maxIterations: 3,
     maxChangedLines: 400,
     minDuplicateLines: 5,
@@ -47,19 +48,24 @@ type Turn = (spec: RunSpec) => string;
 
 export interface FakeAgent extends AgentAdapter {
   prompts: string[];
+  /** Everything each call was asked to do, in order. */
+  specs: RunSpec[];
 }
 
 /** An agent that plays scripted turns: each turn may touch files in `spec.cwd` and returns its final message. */
 export function fakeAgent(vendor: string, turns: Turn[]): FakeAgent {
   const prompts: string[] = [];
+  const specs: RunSpec[] = [];
   return {
     id: `fake-${vendor}`,
     vendor,
     prompts,
+    specs,
     detect: async () => ({ installed: true, version: "fake" }),
     async run(spec: RunSpec): Promise<RunResult> {
       const turn = turns[prompts.length];
       prompts.push(spec.prompt);
+      specs.push(spec);
       if (!turn) throw new Error(`fake agent ${vendor} was called more often than scripted`);
       return { status: "ok", finalMessage: turn(spec), raw: null };
     },

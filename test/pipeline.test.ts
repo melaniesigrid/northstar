@@ -238,6 +238,57 @@ describe("runPipeline", () => {
     expect(reviewer.prompts[0]).toContain("- Store dates in UTC.");
   });
 
+  it("has the planner plan first, then gives the plan to the writer and the reviewer", async () => {
+    const planner = fakeAgent("c", [() => "1. Create feature.txt.\n4. Done when: feature.txt exists."]);
+    const writer = fakeAgent("a", [writeFileTurn("feature.txt", "feature\n")]);
+    const reviewer = fakeAgent("b", [CLEAN_REVIEW]);
+
+    const outcome = await runPipeline({ ...pipelineInput(writer, reviewer), planner });
+
+    expect(planner.specs[0]?.readOnly).toBe(true);
+    expect(writer.prompts[0]).toContain("Plan to follow:\n1. Create feature.txt.");
+    expect(reviewer.prompts[0]).toContain("The plan the writer was given:\n1. Create feature.txt.");
+    expect(outcome.plan).toContain("Done when: feature.txt exists.");
+  });
+
+  it("carries on without a plan when the planner fails, and says so", async () => {
+    const brokenPlanner = fakeAgent("c", [() => "   "]);
+    const writer = fakeAgent("a", [writeFileTurn("feature.txt", "feature\n")]);
+
+    const outcome = await runPipeline({ ...pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW])), planner: brokenPlanner });
+
+    expect(outcome.status).toBe("passed");
+    expect(outcome.plan).toBeUndefined();
+    expect(outcome.planFailure).toContain("The planner ended with status");
+    expect(writer.prompts[0]).not.toContain("Plan to follow");
+  });
+
+  it("discards anything the planner writes", async () => {
+    const meddlingPlanner = fakeAgent("c", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "plan-scratch.txt"), "notes\n");
+        return "1. Create feature.txt.";
+      },
+    ]);
+    const input = pipelineInput(fakeAgent("a", [writeFileTurn("feature.txt", "feature\n")]), fakeAgent("b", [CLEAN_REVIEW]));
+
+    const outcome = await runPipeline({ ...input, planner: meddlingPlanner });
+
+    const committedFiles = gitIn(input.repoRoot, "ls-tree", "--name-only", outcome.branch).split("\n");
+    expect(committedFiles).not.toContain("plan-scratch.txt");
+  });
+
+  it("lets the writer run the gate commands and asks the reviewer for structured findings", async () => {
+    const writer = fakeAgent("a", [writeFileTurn("feature.txt", "feature\n")]);
+    const reviewer = fakeAgent("b", [CLEAN_REVIEW]);
+
+    await runPipeline(pipelineInput(writer, reviewer, { writerEffort: "high" }));
+
+    expect(writer.specs[0]).toMatchObject({ readOnly: false, effort: "high", allowedCommands: ["test -f feature.txt"] });
+    expect(reviewer.specs[0]).toMatchObject({ readOnly: true });
+    expect(reviewer.specs[0]?.outputSchema).toHaveProperty("properties.findings");
+  });
+
   it("stops before any agent runs when setup fails", async () => {
     const writer = fakeAgent("a", []);
     const input = pipelineInput(writer, fakeAgent("b", []), { setup: ["exit 3"] });

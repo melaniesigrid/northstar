@@ -2,6 +2,8 @@
 
 An agent-agnostic quality pipeline for coding agents. Any supported agent writes the code, hard gates check it, and a second agent from a different vendor reviews it. Only a change that clears both is committed.
 
+It is built to lift a weaker writer. The checks, the plan, and the review do not care which model wrote the code, so the standard stays the same when the writer is the cheaper or weaker agent.
+
 The goal is code a human can read and maintain: no duplicated helpers, no dead code, no drive-by edits.
 
 ## Status
@@ -15,6 +17,7 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Setup commands and configurable hard gates | Slop score and benchmark |
 | Line budget check | Writer rebuttal round |
 | Convention profile and reuse search | Pull request creation |
+| Optional planner role | |
 | Duplication gate | |
 | Suppression gate | |
 | AI credit gate | |
@@ -23,26 +26,59 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Retry loop with exact feedback, capped attempts | |
 | Run report and JSON audit log | |
 
-The adapters are checked against each CLI's documented flags and output, and their parsers are unit tested. They have not yet been exercised in a full live run with both agents. See `docs/EXPERIMENTS.md`.
+The adapters are checked against each CLI's documented flags, and the Codex adapter's exact arguments were run through the real Codex CLI up to the sign-in step. No full live run with both agents has happened yet. See `docs/EXPERIMENTS.md`. The reasons behind the design are in `docs/RESEARCH.md`.
 
 ## How a run works
 
 1. NorthStar creates a branch `northstar/<run id>` in its own worktree. Your checkout is never touched.
 2. Setup commands run once, for example `npm ci`.
 3. NorthStar reads the repo's conventions and finds existing helpers that relate to the task.
-4. The writer agent makes the change, with both in hand.
-5. The change is staged and checked against the line budget.
-6. The built-in slop checks run on what the change added.
-7. Each configured gate runs in order. A gate is any command that exits 0 on success.
-8. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
-9. A failed check or a blocking finding goes back to the writer with the exact reason.
-10. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
+4. If a planner is configured, it reads the repo and writes a short plan with done-when checks.
+5. The writer agent makes the change. Its brief holds the task, the plan, your rules, the relevant helpers, and every limit it will be checked against.
+6. The change is staged and checked against the line budget.
+7. The built-in slop checks run on what the change added.
+8. Each configured gate runs in order. A gate is any command that exits 0 on success.
+9. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
+10. A failed check or a blocking finding goes back to the writer with the exact reason.
+11. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
 
 A review that cannot be parsed is never treated as a pass.
 
+## Using NorthStar with Codex
+
+A good setup when Codex is your everyday writer and you also have Claude Code:
+
+```json
+{
+  "writer": "codex",
+  "planner": "claude-code",
+  "reviewer": "claude-code",
+  "writerEffort": "high",
+  "setup": ["npm ci"],
+  "gates": [
+    { "name": "typecheck", "command": "npm run typecheck" },
+    { "name": "test", "command": "npm test" }
+  ]
+}
+```
+
+What this does for a weaker writer:
+
+- **The planner thinks first.** It reads the repo and decides which files change, what to reuse, which tests to add, and what "done" means. The writer spends its effort on writing.
+- **The brief is short.** Codex's own guidance is that coding models do worse when over-prompted, so the writer gets the task, the plan, your rules, and its limits, and little else.
+- **Nothing is a surprise.** The writer is told the exact commands it will be checked with and may run them itself before it finishes.
+- **The judge is not the author.** A second vendor reviews with a skeptical brief and concrete examples of what blocks a merge. Findings come back as structured output, so a chatty reply cannot break the run.
+- **Rejections are exact.** A failed check returns the file, the line, and the reason, which is the feedback a weaker model needs to fix a problem in one more try.
+
+With Codex alone, set `reviewer` to `codex` and give it a different `reviewerModel` or a higher `reviewerEffort`. The run works, and the report says the review came from the writer's own vendor.
+
+Codex runs the writer in its workspace sandbox, which has no network by default. Put dependency installs in `setup`, which runs before the writer starts.
+
 ## Conventions and reuse
 
-Before the writer starts, NorthStar tells it how the repo is written and which existing code looks relevant. The reviewer gets the same conventions, so naming and reuse are judged against the repo and not against a model's habits.
+Before the writer starts, NorthStar finds out how the repo is written and which existing code looks relevant. The planner and the reviewer get the full conventions, so plans, naming, and reuse are judged against the repo and not against a model's habits.
+
+The writer gets less on purpose: your hand-written rules and the relevant helpers, not the scanned overview. A 2026 study found that broad context files lowered task success and raised cost by more than 20%, while short, specific, human-written instructions helped. Set `"writerConventions": "all"` to give the writer everything.
 
 ### Convention profile
 
@@ -54,7 +90,7 @@ A scan of tracked files and package manifests finds:
 - The folders that hold most of the code
 - The libraries already in use
 
-Run `northstar profile` to write the result to `northstar.profile.json`, then review it, edit it, and commit it. Add your own rules under `notes`. They reach both agents word for word and are kept when you rescan:
+Run `northstar profile` to write the result to `northstar.profile.json`, then review it, edit it, and commit it. Add your own rules under `notes`. They reach every agent word for word and are kept when you rescan. Keep them few and specific: a rule earns its place when an agent has made the mistake it prevents.
 
 ```json
 { "notes": ["Store dates in UTC.", "Server components by default. Add \"use client\" only for interactivity."] }
@@ -171,9 +207,12 @@ Exit codes: `0` the change passed and is committed on its branch, `1` a human ne
 | --- | --- | --- | --- |
 | `writer` | yes | | Agent that writes: `claude-code` or `codex` |
 | `reviewer` | yes | | Agent that reviews. Pick a different vendor from the writer |
+| `planner` | no | none | Agent that plans before the writer starts |
 | `gates` | yes | | List of `{ "name", "command" }`. At least one |
 | `setup` | no | `[]` | Commands run once in the fresh worktree |
-| `writerModel`, `reviewerModel` | no | CLI default | Passed to the agent's `--model` flag |
+| `writerModel`, `reviewerModel`, `plannerModel` | no | CLI default | Passed to the agent's `--model` flag |
+| `writerEffort`, `reviewerEffort`, `plannerEffort` | no | CLI default | `low`, `medium` or `high`. Mapped to each CLI's reasoning effort setting |
+| `writerConventions` | no | `notes` | `notes` gives the writer your hand-written rules only. `all` adds the scanned conventions |
 | `maxIterations` | no | `3` | Writer attempts before a human takes over |
 | `maxChangedLines` | no | `400` | Line budget for one change |
 | `minDuplicateLines` | no | `5` | Length of a repeated block that counts as a clone |

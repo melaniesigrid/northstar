@@ -56,6 +56,7 @@ async function run(task: string, options: { config?: string; base: string }): Pr
     config,
     writer: getAdapter(config.writer),
     reviewer: getAdapter(config.reviewer),
+    planner: config.planner === undefined ? undefined : getAdapter(config.planner),
   });
 
   const report = renderReport(outcome);

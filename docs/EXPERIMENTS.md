@@ -11,6 +11,18 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: The adapter's arguments against the real Codex CLI
+
+**Question.** Does Codex accept the exact arguments the adapter builds, and does its event stream look the way the parser assumes?
+
+**Method.** Installed Codex CLI 0.171.0 in a scratch folder with an empty home directory and no credentials. Ran the adapter's argument lists for a writer and for a reviewer with a model, a reasoning effort, and an output schema. With no sign-in and no network route to the API, the run can get as far as starting a turn and no further. Checked Claude Code's flags against the help text of version 2.1.329.
+
+**Result.** Codex accepted both argument lists, read the prompt from stdin, started a thread, and began a turn. So the flags, the config override for reasoning effort, and the schema file are all valid.
+
+The event stream showed a real parser bug. Codex prints an `error` event for every reconnect attempt and then carries on. The parser treated any `error` event as a failed run, so a run that dropped its connection once and then finished would have been thrown away. A run now counts as failed only when a turn fails, the process exits non-zero, or no turn completes. The events seen are kept as test fixtures.
+
+**Next.** This proves the arguments parse. It does not prove a run completes, that the structured output arrives as expected, or that the sandbox lets the writer run the gate commands. Those need a signed-in run.
+
 ## 2026-11-20: Convention scan and reuse search on four repos
 
 **Question.** Does a scan of file names and manifests produce conventions that are true of the repo, and does a keyword search over declarations surface the helper a task should reuse?

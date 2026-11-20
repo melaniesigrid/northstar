@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReviewPrompt, parseFindings } from "../src/review.js";
+import { buildReviewPrompt, FINDINGS_SCHEMA, parseFindings } from "../src/review.js";
 
 describe("parseFindings", () => {
   it("reads findings even when the reviewer wraps the JSON in prose or a code fence", () => {
@@ -13,6 +13,19 @@ describe("parseFindings", () => {
     expect(parseFindings(message)).toEqual({
       ok: true,
       findings: [{ severity: "advisory", rule: "naming", file: "a.ts", line: 3, explanation: "Vague name." }],
+    });
+  });
+
+  it("reads a structured finding with no suggested fix and the performance rule", () => {
+    const message = JSON.stringify({
+      findings: [
+        { severity: "blocking", rule: "performance", file: "a.ts", line: 9, explanation: "Query in a loop.", suggestedFix: null },
+      ],
+    });
+
+    expect(parseFindings(message)).toEqual({
+      ok: true,
+      findings: [{ severity: "blocking", rule: "performance", file: "a.ts", line: 9, explanation: "Query in a loop." }],
     });
   });
 
@@ -31,7 +44,25 @@ describe("parseFindings", () => {
   });
 });
 
+describe("FINDINGS_SCHEMA", () => {
+  it("requires every field at every level, which strict structured output demands", () => {
+    const finding = FINDINGS_SCHEMA.properties.findings.items;
+
+    expect(FINDINGS_SCHEMA.additionalProperties).toBe(false);
+    expect(finding.additionalProperties).toBe(false);
+    expect([...finding.required].sort()).toEqual(Object.keys(finding.properties).sort());
+  });
+});
+
 describe("buildReviewPrompt", () => {
+  it("tells the reviewer to be skeptical and shows what blocking means", () => {
+    const prompt = buildReviewPrompt({ task: "task", diff: "diff" });
+
+    expect(prompt).toContain("talk itself out of reporting it");
+    expect(prompt).toContain("- performance:");
+    expect(prompt).toContain("a careful human reviewer would refuse to merge");
+  });
+
   it("truncates a very large diff and tells the reviewer where to read the rest", () => {
     const prompt = buildReviewPrompt({ task: "task", diff: "x".repeat(100_000) });
 
