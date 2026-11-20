@@ -11,6 +11,72 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Commit replay on three repos with application code
+
+**Question.** On real TypeScript and JavaScript, how often do the slop checks block a commit, and is each block deserved?
+
+**Method.** Same replay as the entry below, on typecase (React, JS), quant-harness (TS), and shipshape-platform (TS monorepo with Next.js and Drizzle): 24 non-merge commits in total. Every flagged block was read and sorted into deserved, debatable, or false positive. The detector was then tightened and the replay repeated.
+
+**Result.**
+
+| Repo | Commits | Blocked at first | Blocked after tightening |
+| --- | --- | --- | --- |
+| typecase | 12 | 1 | 1 |
+| quant-harness | 3 | 1 | 1 |
+| shipshape-platform | 9 | 6 | 1 |
+| Total | 24 | 8 | 3 |
+
+The first pass over shipshape-platform flagged four kinds of repetition that are not copy-paste:
+
+- Multi-line import lists, where two files import the same names.
+- HTML and CSS embedded in template literals.
+- Literal data: status lists, theme tokens, seed rows.
+- Plain field mappings such as `title: row.title,` repeated between an insert and an update.
+
+The first two are now skipped. The last two no longer block. They are reported as repeated data and sent to the reviewer, because some are worth fixing: one status list is written out in three files when it could be imported.
+
+The three commits still blocked, all read by hand:
+
+- quant-harness: `mean` and `sd` helpers copied whole into a second file. Deserved.
+- shipshape-platform: the same five-line query and lookup built twice in one file. Deserved. The same commit also repeats tenant and board foreign key columns across Drizzle tables, which is debatable: a shared column helper would remove it, but many schemas are written this way.
+- typecase: one `eslint-disable-next-line react-hooks/exhaustive-deps`. Correctly detected. Whether it should block is a policy choice, which is what `maxNewSuppressions` is for.
+
+No remaining block is a false positive. The unreferenced check flagged a real unused export in typecase (`looksUsing`) and a mix of unused type exports and convention-based Drizzle relations in shipshape-platform, which supports keeping it advisory. HTTP verb handlers such as `GET` are now skipped as found by convention.
+
+One bug surfaced on the way: backticks inside regex literals threw off template literal tracking and exposed embedded CSS to the gate. Tracking now ignores backticks inside regexes and quoted strings.
+
+**Next.** 24 commits across three repos by one author is a small sample. The blocked rate (3 of 24) and the zero false positive count need checking on code by other people before either number is quoted anywhere. Moving repeated data out of the hard gate means the reviewer now carries that judgment, which only a live run can test.
+
+## 2026-11-20: Commit replay on two real repos
+
+**Question.** How often would the slop checks have blocked real commits, and were those blocks deserved?
+
+**Method.** Cloned DueBook and ZipQuarry with their recent history. For each non-merge commit, restaged it on top of its parent and ran the same `checkSlop` path the pipeline uses, with default settings. Also scanned each repo with every line treated as new. Repeated the replay on NorthStar's own history.
+
+**Result.** Both repos turned out to be static sites: HTML, CSS, and a little JavaScript, with no TypeScript.
+
+| Repo | Commits replayed | Blocked | Cause |
+| --- | --- | --- | --- |
+| DueBook | 9 | 1 | Shared page head copied into a new page |
+| ZipQuarry | 32 | 10 | Shared page head, repeated CSS declarations, styles and scripts inlined in one page and also kept in shared files |
+| NorthStar | 3 | 0 | |
+
+No suppressions and no unreferenced symbols were flagged in any of them. Every block came from the duplication gate, and nearly all were structural: a new page has to repeat the head of the others, and CSS rules repeat declarations by design. A 31% block rate on a static site is a false positive problem, not a quality signal. One finding was real: about 50 lines of JavaScript live both inline in ZipQuarry's `index.html` and in `writing/article.js`.
+
+Markup and stylesheets are now skipped by the slop checks. After that change the same replay blocks 0 of 9 and 0 of 32 commits.
+
+**Next.** This run exposed a false positive class but says little about precision on application code, because neither repo has any. See the entry above for that measurement. The inline script duplication is now invisible to the gate, which is a known gap.
+
+## 2026-11-20: Suppression and unreferenced symbol checks
+
+**Question.** Which other slop signals can be measured on added lines alone, with no language tooling, and precisely enough to act on?
+
+**Method.** Added two checks. One counts new lint and type escape hatches such as `as any` and `@ts-ignore`. The other lists new top-level symbols whose names appear nowhere else in the repo. Ran both over NorthStar's own 26 files with every line treated as new.
+
+**Result.** The suppression check is precise enough to block: once string literals and comment prose are ignored, it reported nothing false on our code. Its first run did flag one line, the pattern for Java's `@SuppressWarnings` matching its own definition. That pattern was dropped rather than special-cased, since Java is not a target yet. The unreferenced check reported nothing on our code. It is a textual guess that cannot tell dead code from a public API, so it does not block. It hands its list to the reviewer, who can read the repo and decide.
+
+**Next.** The unreferenced check has only been proven on unit tests and a clean codebase. It needs a run on a repo with known dead code to see how much noise it gives the reviewer. Still open from before: a false positive measurement for all three checks on larger repos.
+
 ## 2026-11-20: Duplication gate, first run on our own code
 
 **Question.** Can a dependency-free textual check catch copy-paste in added code without flagging ordinary repetition such as imports?

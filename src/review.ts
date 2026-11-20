@@ -14,7 +14,8 @@ const OUTPUT_FORMAT = `Reply with one JSON object and nothing else:
 {"findings": [{"severity": "blocking" | "advisory", "rule": "<one of the six rules>", "file": "<path>", "line": <number>, "explanation": "<one or two sentences a human can verify>", "suggestedFix": "<optional>"}]}
 Use "blocking" only for problems a careful human reviewer would refuse to merge. Return {"findings": []} when the diff is clean.`;
 
-export function buildReviewPrompt(task: string, diff: string): string {
+/** `hints` are signals from automated checks that the reviewer should verify, not conclusions. */
+export function buildReviewPrompt(task: string, diff: string, hints: string[] = []): string {
   const shownDiff =
     diff.length <= MAX_DIFF_CHARS
       ? diff
@@ -23,6 +24,7 @@ export function buildReviewPrompt(task: string, diff: string): string {
     "You are reviewing a change written by another coding agent. You did not write it. Do not edit any files.",
     `The task was:\n${task}`,
     RUBRIC,
+    ...hints,
     OUTPUT_FORMAT,
     `The staged diff:\n${shownDiff}`,
   ].join("\n\n");

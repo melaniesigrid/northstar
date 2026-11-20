@@ -61,6 +61,8 @@ export interface Config {
   maxChangedLines: number;
   /** Added code that repeats this many consecutive meaningful lines from elsewhere is blocked. */
   minDuplicateLines: number;
+  /** How many new lint or type suppressions a change may add before it is blocked. */
+  maxNewSuppressions: number;
   /** Commands run once in the fresh worktree, such as installing dependencies. */
   setup: string[];
   gates: GateConfig[];

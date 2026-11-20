@@ -1,5 +1,6 @@
 import { formatFindings } from "./review.js";
 import type { Attempt, RunOutcome } from "./pipeline.js";
+import type { SlopReport } from "./slop.js";
 import type { Usage } from "./types.js";
 
 function describeUsage(label: string, usage: Usage | undefined): string | undefined {
@@ -8,12 +9,18 @@ function describeUsage(label: string, usage: Usage | undefined): string | undefi
   return `- ${label}: ${usage.inputTokens} tokens in, ${usage.outputTokens} out${cost}`;
 }
 
+function describeSlop(slop: SlopReport): string {
+  const blocking = `${slop.duplication.duplicatedLines} duplicated lines, ${slop.suppressions.length} new suppressions`;
+  const forReviewer = `${slop.unreferenced.length} unreferenced symbols, ${slop.duplication.dataClones.length} repeated data blocks`;
+  return `- Slop checks: ${blocking}. Sent to the reviewer: ${forReviewer}`;
+}
+
 function renderAttempt(attempt: Attempt): string {
   const gates = attempt.gates.map((gate) => `${gate.name} ${gate.passed ? "passed" : "FAILED"}`).join(", ");
   const lines = [
     `## Attempt ${attempt.number}`,
     `- Changed: ${attempt.filesChanged.length} files, ${attempt.linesChanged} lines`,
-    attempt.duplication && `- Duplicated lines added: ${attempt.duplication.duplicatedLines}`,
+    attempt.slop && describeSlop(attempt.slop),
     `- Gates: ${gates || "not reached"}`,
     describeUsage("Writer", attempt.writerUsage),
     describeUsage("Reviewer", attempt.reviewerUsage),

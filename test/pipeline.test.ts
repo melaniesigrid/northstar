@@ -140,7 +140,57 @@ describe("runPipeline", () => {
 
     expect(outcome.attempts.map((attempt) => attempt.failure?.stage)).toEqual(["slop", undefined]);
     expect(writer.prompts[1]).toContain("copy.ts:1-5 repeats slug.ts:1");
-    expect(outcome.attempts[1]?.duplication?.duplicatedLines).toBe(0);
+    expect(outcome.attempts[1]?.slop?.duplication.duplicatedLines).toBe(0);
+  });
+
+  it("lets a new page repeat the markup every page shares", async () => {
+    const page = ["<head>", "<meta charset='utf-8'>", "<title>Site</title>", "<link rel='icon' href='/i.png'>", "<link rel='stylesheet' href='/s.css'>", "</head>"].join("\n");
+    const repoRoot = createTempRepo();
+    writeFileSync(path.join(repoRoot, "index.html"), page);
+    gitIn(repoRoot, "add", "-A");
+    gitIn(repoRoot, "commit", "-q", "-m", "add home page");
+    const writer = fakeAgent("a", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "feature.txt"), "about page\n");
+        writeFileSync(path.join(spec.cwd, "about.html"), page);
+        return "done";
+      },
+    ]);
+
+    const outcome = await runPipeline(pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW]), {}, repoRoot));
+
+    expect(outcome.status).toBe("passed");
+  });
+
+  it("blocks a change that silences the type checker and names the line", async () => {
+    const writer = fakeAgent("a", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "feature.txt"), "typed value\n");
+        writeFileSync(path.join(spec.cwd, "value.ts"), "export const parsed = JSON.parse(raw) as any;\n");
+        return "done";
+      },
+      writeFileTurn("value.ts", "export const parsed: unknown = JSON.parse(raw);\n"),
+    ]);
+
+    const outcome = await runPipeline(pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW])));
+
+    expect(outcome.attempts.map((attempt) => attempt.failure?.stage)).toEqual(["slop", undefined]);
+    expect(writer.prompts[1]).toContain("value.ts:1 cast to any");
+  });
+
+  it("asks the reviewer to verify new symbols that nothing references", async () => {
+    const writer = fakeAgent("a", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "feature.txt"), "feature\n");
+        writeFileSync(path.join(spec.cwd, "orphan.ts"), "export function orphanHelper() {}\n");
+        return "done";
+      },
+    ]);
+    const reviewer = fakeAgent("b", [CLEAN_REVIEW]);
+
+    await runPipeline(pipelineInput(writer, reviewer));
+
+    expect(reviewer.prompts[0]).toContain("orphan.ts:1 orphanHelper");
   });
 
   it("stops before any agent runs when setup fails", async () => {
