@@ -1,0 +1,4 @@
+{
+  "baseCommit": "ec43c705ef1776a9560099a94c94fc48a2b27881",
+  "notes": "Should extend listCommits in src/git.ts with a range, not add a second function that repeats the git log call and its parsing."
+}

@@ -5,6 +5,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { getAdapter, listAdapters } from "./adapters/index.js";
 import { auditCommits, renderAudit } from "./audit.js";
+import { loadTasks, renderBenchmark, runBenchmark } from "./bench.js";
 import { CONFIG_FILE, DEFAULT_SLOP_SETTINGS, loadConfig } from "./config.js";
 import { findRepoRoot } from "./git.js";
 import { runPipeline } from "./pipeline.js";
@@ -14,6 +15,7 @@ import { renderReport } from "./report.js";
 const USAGE = `Usage:
   northstar run "<task>" [--config <file>] [--base <git ref>]
   northstar audit [--commits <n>] [--json]
+  northstar bench [--tasks <folder>] [--config <file>]
   northstar profile
   northstar doctor
 
@@ -22,6 +24,9 @@ run      Writes the change in an isolated worktree, runs the gates, then has a
          needs to look.
 audit    Scores the repo's recent commits with the slop checks. Needs no
          config and no agent, and never touches your checkout.
+bench    Runs each benchmark task twice from the same commit, once with the
+         writer alone and once through the pipeline, and compares the results.
+         Tasks are read from benchmark/tasks unless --tasks says otherwise.
 profile  Scans the repo's conventions and writes them to ${PROFILE_FILE}
          for you to review, edit and commit. Your notes are kept on rescans.
 doctor   Shows which agent CLIs are installed.`;
@@ -36,6 +41,36 @@ async function doctor(): Promise<number> {
     const { installed, version } = await adapter.detect();
     console.log(`${adapter.id}: ${installed ? `installed (${version})` : "not found on PATH"}`);
   }
+  return 0;
+}
+
+const DEFAULT_TASKS_FOLDER = path.join("benchmark", "tasks");
+
+async function bench(options: { tasks?: string; config?: string }): Promise<number> {
+  const repoRoot = await findRepoRoot(process.cwd());
+  const config = await loadConfig(options.config ?? path.join(repoRoot, CONFIG_FILE));
+  const tasks = await loadTasks(path.resolve(repoRoot, options.tasks ?? DEFAULT_TASKS_FOLDER));
+  const benchId = newRunId();
+  console.error(`Running ${tasks.length} tasks twice each. This uses your agents and can take a while.`);
+
+  const results = await runBenchmark(
+    {
+      benchId,
+      repoRoot,
+      config,
+      writer: getAdapter(config.writer),
+      reviewer: getAdapter(config.reviewer),
+      planner: config.planner === undefined ? undefined : getAdapter(config.planner),
+    },
+    tasks,
+  );
+
+  const report = renderBenchmark(results);
+  const benchDir = path.join(repoRoot, ".northstar", "bench", benchId);
+  await mkdir(benchDir, { recursive: true });
+  await writeFile(path.join(benchDir, "report.md"), report);
+  await writeFile(path.join(benchDir, "results.json"), JSON.stringify(results, null, 2));
+  console.log(report);
   return 0;
 }
 
@@ -95,6 +130,7 @@ async function main(): Promise<number> {
       base: { type: "string", default: "HEAD" },
       commits: { type: "string" },
       json: { type: "boolean" },
+      tasks: { type: "string" },
     },
   });
   const [command, ...rest] = positionals;
@@ -103,6 +139,7 @@ async function main(): Promise<number> {
   if (command === "doctor") return doctor();
   if (command === "profile") return profile();
   if (command === "audit") return audit(values);
+  if (command === "bench") return bench(values);
   if (command === "run" && task) return run(task, values);
   console.error(USAGE);
   return 2;

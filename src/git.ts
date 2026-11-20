@@ -37,9 +37,9 @@ export async function removeWorktree(repoRoot: string, worktreePath: string): Pr
 }
 
 /** A scratch checkout on no branch, for reading history without touching the user's own checkout. */
-export async function createDetachedWorktree(repoRoot: string, id: string): Promise<string> {
+export async function createDetachedWorktree(repoRoot: string, id: string, ref = "HEAD"): Promise<string> {
   const worktreePath = path.join(os.tmpdir(), "northstar", id);
-  await git(repoRoot, ["worktree", "add", "--detach", worktreePath, "HEAD"]);
+  await git(repoRoot, ["worktree", "add", "--detach", worktreePath, ref]);
   return worktreePath;
 }
 

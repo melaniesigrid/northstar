@@ -14,11 +14,12 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | --- | --- |
 | Isolated git worktree per run | Complexity check |
 | Claude Code and Codex adapters behind one interface | Convention rules proposed by an agent |
-| Setup commands and configurable hard gates | Slop score and benchmark |
+| Setup commands and configurable hard gates | Benchmark results from a live run |
 | Line budget check | Writer rebuttal round |
 | Convention profile and reuse search | Pull request creation |
 | Optional planner role | |
 | `northstar audit` for scoring past commits | |
+| `northstar bench` for comparing the writer alone with the pipeline | |
 | Weak test signal for the reviewer | |
 | Duplication gate | |
 | Suppression gate | |
@@ -70,6 +71,24 @@ Per 1,000 added lines of source (9342 lines in total):
 Below the summary comes one row per commit, then the exact reason for each blocked commit with file and line. Merge commits and a repo's first commit are left out, since neither has a single parent to compare against.
 
 The audit is also how NorthStar measures itself: the same command scores a raw agent's output and the pipeline's output on the same tasks.
+
+## Measure the difference: bench
+
+`northstar bench` answers the question the whole project rests on: does the pipeline produce cleaner code than the same agent working alone?
+
+It runs each task in `benchmark/tasks` twice from the same commit. The first time the writer gets the task and nothing else, one shot. The second time the task goes through the full pipeline. Both results are then scored by the same gates and slop checks.
+
+```
+# NorthStar benchmark of 5 tasks
+
+Clean means every gate passed and no hard slop check failed. Both arms are held to the same test.
+- Writer alone: 2 of 5 clean
+- Through the pipeline: 5 of 5 clean, 4 of 5 also approved by the reviewer
+```
+
+The numbers above only show the layout. No live benchmark has been run yet. Below the summary comes one row per task and arm, with lines changed, duplicated lines, suppressions, attempts, tokens, cost, and time, so the price of the extra quality is always next to it.
+
+Five seed tasks against NorthStar's own code are included. See `benchmark/tasks/README.md` for the task format and what makes a good task.
 
 ## Using NorthStar with Codex
 

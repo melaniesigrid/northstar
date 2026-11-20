@@ -1,0 +1,4 @@
+{
+  "baseCommit": "ec43c705ef1776a9560099a94c94fc48a2b27881",
+  "notes": "Small and self-contained. A raw agent should do fine here. Watch for a hardcoded version string instead of reading package.json."
+}

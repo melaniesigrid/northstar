@@ -1,0 +1,1 @@
+Make the reuse search also consider the words in a helper's file name, so a task that mentions billing surfaces helpers in `billing.ts` even when their own names share no word with the task. A helper whose own name matches must still rank above one that matches only by file name. Add tests.

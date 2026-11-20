@@ -67,7 +67,8 @@ export interface RunOutcome {
   attempts: Attempt[];
 }
 
-async function runSetup(config: Config, cwd: string): Promise<string | undefined> {
+/** Runs the setup commands in a fresh worktree. Returns what went wrong, or undefined when all passed. */
+export async function runSetup(config: Config, cwd: string): Promise<string | undefined> {
   for (const command of config.setup) {
     const result = await exec(command, [], { cwd, shell: true, timeoutMs: config.gateTimeoutMs });
     if (result.exitCode !== 0) {
