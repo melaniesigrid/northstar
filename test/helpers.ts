@@ -44,7 +44,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
   };
 }
 
-type Turn = (spec: RunSpec) => string;
+type Turn = (spec: RunSpec) => string | RunResult;
 
 export interface FakeAgent extends AgentAdapter {
   prompts: string[];
@@ -52,7 +52,10 @@ export interface FakeAgent extends AgentAdapter {
   specs: RunSpec[];
 }
 
-/** An agent that plays scripted turns: each turn may touch files in `spec.cwd` and returns its final message. */
+/**
+ * An agent that plays scripted turns: each turn may touch files in `spec.cwd` and returns its final message,
+ * or a whole result when the turn should end some other way than "ok".
+ */
 export function fakeAgent(vendor: string, turns: Turn[]): FakeAgent {
   const prompts: string[] = [];
   const specs: RunSpec[] = [];
@@ -67,7 +70,8 @@ export function fakeAgent(vendor: string, turns: Turn[]): FakeAgent {
       prompts.push(spec.prompt);
       specs.push(spec);
       if (!turn) throw new Error(`fake agent ${vendor} was called more often than scripted`);
-      return { status: "ok", finalMessage: turn(spec), raw: null };
+      const answer = turn(spec);
+      return typeof answer === "string" ? { status: "ok", finalMessage: answer, raw: null } : answer;
     },
   };
 }

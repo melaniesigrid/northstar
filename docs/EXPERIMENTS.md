@@ -11,6 +11,18 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: First run against the real Claude Code binary, signed out
+
+**Question.** What happens when the pipeline meets a real agent CLI instead of a scripted one, in the worst ordinary case: the CLI is installed and nobody is signed in?
+
+**Method.** In a throwaway repo with planner, writer, and reviewer all set to Claude Code 2.1.329, ran `northstar run "Add a subtract function to math.ts"` from a workspace with no credentials.
+
+**Result.** The binary accepted every argument list the adapter built: read-only for the planner, edit permission plus the allowed gate commands and `--effort high` for the writer. Each call exited 0 and returned a result labelled `"subtype": "success"` with `"is_error": true` and the text "Authentication error". The parser reported both calls as failed with the vendor's message, the planner's failure did not stop the run, and the run ended as "needs a human" with exit code 1. That payload is now a test fixture. No model call succeeded, so this says nothing about quality.
+
+Two things were wrong around the edges. The report told the reader to inspect a worktree that held no changes, and the run left that worktree and its branch behind. And nothing warned about the sign-in before the run, which for a benchmark would mean every task failing one after another.
+
+**Next.** Both are fixed. A run that changed no file removes its worktree and branch and says so. `northstar doctor --live` asks each configured agent for a one-word answer, and `northstar bench` runs that check before its first task. Checked against the real binary: `doctor --live` printed "NOT READY" with the vendor's message and exited 1, and `bench` refused to start. A signed-in run is still the missing piece.
+
 ## 2026-11-20: Benchmark runner built, not yet run live
 
 **Question.** Can the central claim be tested with one command: that the pipeline produces cleaner code than the same writer working alone?

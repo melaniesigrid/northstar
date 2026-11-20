@@ -1,8 +1,9 @@
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { runPipeline, type PipelineInput } from "../src/pipeline.js";
-import type { AgentAdapter, Config } from "../src/types.js";
+import { runPipeline, type PipelineInput, type RunOutcome } from "../src/pipeline.js";
+import { renderReport } from "../src/report.js";
+import type { AgentAdapter, Config, RunSpec } from "../src/types.js";
 import {
   CLEAN_REVIEW,
   createTempRepo,
@@ -31,6 +32,9 @@ function pipelineInput(
   };
 }
 
+/** An empty name makes git fail, so a test that expects a branch fails when there is none. */
+const branchOf = (outcome: RunOutcome): string => outcome.branch ?? "";
+
 const BLOCKING_REVIEW = () =>
   JSON.stringify({
     findings: [
@@ -49,7 +53,7 @@ describe("runPipeline", () => {
 
     expect(outcome.status).toBe("passed");
     expect(outcome.attempts).toHaveLength(1);
-    expect(gitIn(input.repoRoot, "show", `${outcome.branch}:feature.txt`)).toBe("hello\n");
+    expect(gitIn(input.repoRoot, "show", `${branchOf(outcome)}:feature.txt`)).toBe("hello\n");
     expect(outcome.worktreePath).toBeUndefined();
   });
 
@@ -79,7 +83,7 @@ describe("runPipeline", () => {
     expect(outcome.status).toBe("needs_human");
     expect(outcome.attempts).toHaveLength(2);
     expect(writer.prompts[1]).toContain("Duplicates README.");
-    expect(gitIn(input.repoRoot, "rev-parse", outcome.branch)).toBe(baseCommit);
+    expect(gitIn(input.repoRoot, "rev-parse", branchOf(outcome))).toBe(baseCommit);
     expect(existsSync(outcome.worktreePath ?? "")).toBe(true);
   });
 
@@ -95,9 +99,9 @@ describe("runPipeline", () => {
 
     const outcome = await runPipeline(input);
 
-    const committedFiles = gitIn(input.repoRoot, "ls-tree", "--name-only", outcome.branch).split("\n");
+    const committedFiles = gitIn(input.repoRoot, "ls-tree", "--name-only", branchOf(outcome)).split("\n");
     expect(committedFiles).not.toContain("sneaky.txt");
-    expect(gitIn(input.repoRoot, "show", `${outcome.branch}:feature.txt`)).toBe("hello\n");
+    expect(gitIn(input.repoRoot, "show", `${branchOf(outcome)}:feature.txt`)).toBe("hello\n");
   });
 
   it("never treats an unreadable review as a pass, and does not retry the writer for it", async () => {
@@ -274,7 +278,7 @@ describe("runPipeline", () => {
 
     const outcome = await runPipeline({ ...input, planner: meddlingPlanner });
 
-    const committedFiles = gitIn(input.repoRoot, "ls-tree", "--name-only", outcome.branch).split("\n");
+    const committedFiles = gitIn(input.repoRoot, "ls-tree", "--name-only", branchOf(outcome)).split("\n");
     expect(committedFiles).not.toContain("plan-scratch.txt");
   });
 
@@ -287,6 +291,35 @@ describe("runPipeline", () => {
     expect(writer.specs[0]).toMatchObject({ readOnly: false, effort: "high", allowedCommands: ["test -f feature.txt"] });
     expect(reviewer.specs[0]).toMatchObject({ readOnly: true });
     expect(reviewer.specs[0]?.outputSchema).toHaveProperty("properties.findings");
+  });
+
+  it("leaves no worktree and no branch behind when the writer fails before changing anything", async () => {
+    const signedOut = () => ({ status: "failed" as const, finalMessage: "Authentication error", raw: null });
+    const input = pipelineInput(fakeAgent("a", [signedOut]), fakeAgent("b", []));
+
+    const outcome = await runPipeline(input);
+
+    expect(outcome.status).toBe("needs_human");
+    expect(outcome.attempts[0]?.failure?.detail).toContain("Authentication error");
+    expect(outcome.worktreePath).toBeUndefined();
+    expect(outcome.branch).toBeUndefined();
+    expect(gitIn(input.repoRoot, "branch", "--list", "northstar/*")).toBe("");
+    expect(gitIn(input.repoRoot, "worktree", "list").trim().split("\n")).toHaveLength(1);
+    expect(renderReport(outcome)).toContain("No files were changed, so the run's worktree and branch were removed.");
+  });
+
+  it("keeps the worktree when the writer fails after changing files", async () => {
+    const timedOutMidway = (spec: RunSpec) => {
+      writeFileSync(path.join(spec.cwd, "feature.txt"), "half done\n");
+      return { status: "timeout" as const, finalMessage: "", raw: null };
+    };
+    const input = pipelineInput(fakeAgent("a", [timedOutMidway]), fakeAgent("b", []));
+
+    const outcome = await runPipeline(input);
+
+    expect(outcome.status).toBe("needs_human");
+    expect(existsSync(path.join(outcome.worktreePath ?? "", "feature.txt"))).toBe(true);
+    expect(renderReport(outcome)).toContain(`Inspect the work in ${outcome.worktreePath}.`);
   });
 
   it("stops before any agent runs when setup fails", async () => {

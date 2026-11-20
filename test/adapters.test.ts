@@ -91,6 +91,24 @@ describe("parseClaudeOutput", () => {
     expect(parseClaudeOutput('{"is_error": true, "result": "Credit balance is too low"}').status).toBe("failed");
   });
 
+  it("reports a signed-out run as failed even though the CLI exits 0 and calls it a success", () => {
+    // Captured from Claude Code 2.1.329 running without credentials.
+    const stdout = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      terminal_reason: "api_error",
+      result: "Authentication error · This may be a temporary network issue, please try again",
+      total_cost_usd: 0,
+      usage: { input_tokens: 0, output_tokens: 0 },
+    });
+
+    const result = parseClaudeOutput(stdout);
+
+    expect(result.status).toBe("failed");
+    expect(result.finalMessage).toContain("Authentication error");
+  });
+
   it("reports non-JSON output as failed instead of throwing", () => {
     expect(parseClaudeOutput("command not recognized").status).toBe("failed");
   });
