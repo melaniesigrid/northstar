@@ -22,7 +22,19 @@ describe("parseConfig", () => {
     expect(config).toMatchObject({ maxIterations: 5, setup: ["npm ci"], writerModel: "some-model" });
   });
 
+  it("reads the planner, efforts and what the writer is told about the repo", () => {
+    const config = parseConfig({ ...MINIMAL, planner: "claude-code", writerEffort: "high", writerConventions: "all" });
+
+    expect(config).toMatchObject({ planner: "claude-code", writerEffort: "high", writerConventions: "all" });
+  });
+
+  it("tells the writer only hand-written rules unless asked otherwise", () => {
+    expect(parseConfig(MINIMAL).writerConventions).toBe("notes");
+  });
+
   it.each([
+    ["an unknown effort level", { ...MINIMAL, writerEffort: "extreme" }, '"writerEffort"'],
+    ["an unknown conventions mode", { ...MINIMAL, writerConventions: "some" }, '"writerConventions"'],
     ["no writer", { ...MINIMAL, writer: undefined }, '"writer"'],
     ["no gates", { ...MINIMAL, gates: [] }, '"gates"'],
     ["a gate without a command", { ...MINIMAL, gates: [{ name: "test" }] }, '"command"'],

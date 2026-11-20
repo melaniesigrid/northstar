@@ -161,6 +161,12 @@ export function renderConventions(profile: ConventionProfile): string | undefine
   return `Conventions of this repo. Follow them:\n${lines.map((line) => `- ${line}`).join("\n")}`;
 }
 
+/** Only the rules people wrote by hand, as instructions for an agent. */
+export function renderNotes(profile: ConventionProfile): string | undefined {
+  if (profile.notes.length === 0) return undefined;
+  return `Rules of this repo. Follow them:\n${profile.notes.map((note) => `- ${note}`).join("\n")}`;
+}
+
 function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }

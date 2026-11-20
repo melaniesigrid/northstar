@@ -10,10 +10,12 @@ import {
   stagedDiff,
   stagedStat,
 } from "./git.js";
-import { formatHelpers, type Helper } from "./helper-index.js";
-import { buildReviewPrompt, formatFindings, parseFindings } from "./review.js";
+import type { Helper } from "./helper-index.js";
+import { buildPlanPrompt } from "./plan.js";
+import { buildReviewPrompt, FINDINGS_SCHEMA, formatFindings, parseFindings } from "./review.js";
 import { checkSlop, describeBlockingSlop, reviewerHints, type SlopReport } from "./slop.js";
 import type { AgentAdapter, Config, Finding, Usage } from "./types.js";
+import { buildWriterPrompt } from "./writer-prompt.js";
 
 export interface PipelineInput {
   task: string;
@@ -23,6 +25,7 @@ export interface PipelineInput {
   config: Config;
   writer: AgentAdapter;
   reviewer: AgentAdapter;
+  planner?: AgentAdapter;
 }
 
 export interface AttemptFailure {
@@ -56,29 +59,12 @@ export interface RunOutcome {
   setupFailure?: string;
   /** Existing helpers the writer was pointed to before it started. */
   suggestedHelpers: Helper[];
+  /** The planner's plan, when a planner is configured and it produced one. */
+  plan?: string;
+  /** Why there is no plan although a planner is configured. The run carries on without one. */
+  planFailure?: string;
+  plannerUsage?: Usage;
   attempts: Attempt[];
-}
-
-const WRITER_RULES = `Rules for this change:
-- Change only what the task needs.
-- Reuse existing helpers and follow the conventions already in this repo.
-- Do not add comments that restate the code.
-- Leave no trace of AI authorship: no generated-by notes, no AI co-author lines, and no mention of an assistant in code, comments or docs.
-- Do not commit. Leave your changes in the working directory.`;
-
-function buildWriterPrompt(task: string, context: RepoContext, feedback: string | undefined): string {
-  const parts = [task];
-  if (context.conventions) parts.push(context.conventions);
-  if (context.helpers.length > 0) {
-    parts.push(
-      `Existing helpers that look relevant. Reuse them instead of writing new ones:\n${formatHelpers(context.helpers)}`,
-    );
-  }
-  parts.push(WRITER_RULES);
-  if (feedback) {
-    parts.push(`Your previous attempt was rejected. Fix this and keep the rest of your work:\n${feedback}`);
-  }
-  return parts.join("\n\n");
 }
 
 async function runSetup(config: Config, cwd: string): Promise<string | undefined> {
@@ -94,7 +80,7 @@ async function runSetup(config: Config, cwd: string): Promise<string | undefined
 async function runAttempt(
   input: PipelineInput,
   cwd: string,
-  context: RepoContext,
+  briefing: { context: RepoContext; plan?: string },
   number: number,
   feedback: string | undefined,
 ): Promise<Attempt> {
@@ -106,10 +92,12 @@ async function runAttempt(
   };
 
   const written = await input.writer.run({
-    prompt: buildWriterPrompt(input.task, context, feedback),
+    prompt: buildWriterPrompt({ task: input.task, config, feedback, ...briefing }),
     cwd,
     model: config.writerModel,
+    effort: config.writerEffort,
     readOnly: false,
+    allowedCommands: config.gates.map((gate) => gate.command),
     timeoutMs: config.agentTimeoutMs,
   });
   attempt.writerUsage = written.usage;
@@ -152,12 +140,15 @@ async function runAttempt(
     prompt: buildReviewPrompt({
       task: input.task,
       diff: await stagedDiff(cwd),
-      conventions: context.conventions,
+      plan: briefing.plan,
+      conventions: briefing.context.conventions,
       hints: reviewerHints(attempt.slop),
     }),
     cwd,
     model: config.reviewerModel,
+    effort: config.reviewerEffort,
     readOnly: true,
+    outputSchema: FINDINGS_SCHEMA,
     timeoutMs: config.agentTimeoutMs,
   });
   attempt.reviewerUsage = reviewed.usage;
@@ -175,6 +166,26 @@ async function runAttempt(
     return fail("review", `The reviewer blocked the change:\n${formatFindings(blocking)}`);
   }
   return attempt;
+}
+
+/** Asks the planner for a plan. A planner that fails costs the run its plan, not its life. */
+async function makePlan(input: PipelineInput, cwd: string, context: RepoContext, outcome: RunOutcome): Promise<void> {
+  if (!input.planner) return;
+  const planned = await input.planner.run({
+    prompt: buildPlanPrompt(input.task, context),
+    cwd,
+    model: input.config.plannerModel,
+    effort: input.config.plannerEffort,
+    readOnly: true,
+    timeoutMs: input.config.agentTimeoutMs,
+  });
+  await discardUnstaged(cwd);
+  outcome.plannerUsage = planned.usage;
+  if (planned.status === "ok" && planned.finalMessage.trim() !== "") {
+    outcome.plan = planned.finalMessage.trim();
+  } else {
+    outcome.planFailure = `The planner ended with status "${planned.status}". ${tail(planned.finalMessage, 500)}`.trim();
+  }
 }
 
 function commitMessage(task: string): string {
@@ -206,10 +217,12 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
 
   const context = await gatherContext(worktree.path, task);
   outcome.suggestedHelpers = context.helpers;
+  await makePlan(input, worktree.path, context, outcome);
+  const briefing = { context, plan: outcome.plan };
 
   let feedback: string | undefined;
   for (let number = 1; number <= config.maxIterations; number++) {
-    const attempt = await runAttempt(input, worktree.path, context, number, feedback);
+    const attempt = await runAttempt(input, worktree.path, briefing, number, feedback);
     outcome.attempts.push(attempt);
     if (!attempt.failure) {
       await commitStaged(worktree.path, commitMessage(task));

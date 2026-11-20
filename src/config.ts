@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import type { Config, GateConfig } from "./types.js";
+import { EFFORTS, type Config, type Effort, type GateConfig } from "./types.js";
 
 export const CONFIG_FILE = "northstar.config.json";
 
@@ -34,6 +34,17 @@ function integerAtLeast(minimum: number, raw: RawConfig, key: keyof typeof DEFAU
   return value;
 }
 
+function optionalChoice<T extends string>(raw: RawConfig, key: string, choices: readonly T[]): T | undefined {
+  const value = raw[key];
+  if (value === undefined) return undefined;
+  if (!choices.includes(value as T)) {
+    throw new Error(`Config: "${key}" must be one of: ${choices.join(", ")}.`);
+  }
+  return value as T;
+}
+
+const optionalEffort = (raw: RawConfig, key: string): Effort | undefined => optionalChoice(raw, key, EFFORTS);
+
 function parseSetup(value: unknown): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((command) => typeof command !== "string")) {
@@ -65,8 +76,14 @@ export function parseConfig(raw: unknown): Config {
   return {
     writer: requireString(config, "writer"),
     reviewer: requireString(config, "reviewer"),
+    planner: optionalString(config, "planner"),
     writerModel: optionalString(config, "writerModel"),
     reviewerModel: optionalString(config, "reviewerModel"),
+    plannerModel: optionalString(config, "plannerModel"),
+    writerEffort: optionalEffort(config, "writerEffort"),
+    reviewerEffort: optionalEffort(config, "reviewerEffort"),
+    plannerEffort: optionalEffort(config, "plannerEffort"),
+    writerConventions: optionalChoice(config, "writerConventions", ["notes", "all"] as const) ?? "notes",
     maxIterations: integerAtLeast(1, config, "maxIterations"),
     maxChangedLines: integerAtLeast(1, config, "maxChangedLines"),
     minDuplicateLines: integerAtLeast(1, config, "minDuplicateLines"),

@@ -1,9 +1,19 @@
 {
-  "writer": "claude-code",
-  "reviewer": "codex",
-  "setup": ["npm ci"],
+  "writer": "codex",
+  "planner": "claude-code",
+  "reviewer": "claude-code",
+  "writerEffort": "high",
+  "setup": [
+    "npm ci"
+  ],
   "gates": [
-    { "name": "typecheck", "command": "npm run typecheck" },
-    { "name": "test", "command": "npm test" }
+    {
+      "name": "typecheck",
+      "command": "npm run typecheck"
+    },
+    {
+      "name": "test",
+      "command": "npm test"
+    }
   ]
 }

@@ -14,6 +14,8 @@ export interface ExecOptions {
   timeoutMs?: number;
   /** Run through the shell. Only for commands the repo owner wrote in config. */
   shell?: boolean;
+  /** Text sent to the process on stdin. */
+  input?: string;
 }
 
 export function exec(command: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
@@ -21,8 +23,10 @@ export function exec(command: string, args: string[], options: ExecOptions = {})
     const child = spawn(command, args, {
       cwd: options.cwd,
       shell: options.shell ?? false,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    // Always closed, with or without input, so the child never waits on stdin.
+    child.stdin.end(options.input);
 
     let stdout = "";
     let stderr = "";
