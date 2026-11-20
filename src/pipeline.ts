@@ -10,7 +10,7 @@ import {
   stagedStat,
 } from "./git.js";
 import { buildReviewPrompt, formatFindings, parseFindings } from "./review.js";
-import { checkSlop, describeBlockingSlop, type SlopReport } from "./slop.js";
+import { checkSlop, describeBlockingSlop, reviewerHints, type SlopReport } from "./slop.js";
 import type { AgentAdapter, Config, Finding, Usage } from "./types.js";
 
 export interface PipelineInput {
@@ -136,7 +136,7 @@ async function runAttempt(
   }
 
   const reviewed = await input.reviewer.run({
-    prompt: buildReviewPrompt(input.task, await stagedDiff(cwd), attempt.slop.unreferenced),
+    prompt: buildReviewPrompt(input.task, await stagedDiff(cwd), reviewerHints(attempt.slop)),
     cwd,
     model: config.reviewerModel,
     readOnly: true,

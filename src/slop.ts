@@ -23,6 +23,23 @@ export async function checkSlop(cwd: string, config: Config): Promise<SlopReport
   return analyzeSlop(await loadSnapshot(cwd), config);
 }
 
+/** Signals that are too uncertain to block on, worded for the reviewer to verify. */
+export function reviewerHints(report: SlopReport): string[] {
+  const hints: string[] = [];
+  if (report.unreferenced.length > 0) {
+    const list = report.unreferenced.map((symbol) => `- ${symbol.file}:${symbol.line} ${symbol.name}`).join("\n");
+    hints.push(
+      `An automated check found new symbols whose names appear nowhere else in the repo. Verify each one. If it is truly unused, and is not an entry point or public API, report it as a blocking "scope" finding:\n${list}`,
+    );
+  }
+  if (report.duplication.dataClones.length > 0) {
+    hints.push(
+      `An automated check found new blocks of literal values that repeat values elsewhere in the repo. Verify each one. If an existing constant could be imported instead, report it as a blocking "reuse" finding:\n${formatClones(report.duplication.dataClones)}`,
+    );
+  }
+  return hints;
+}
+
 /** The writer's feedback when a hard slop check fails, or undefined when the change is clean. */
 export function describeBlockingSlop(report: SlopReport, config: Config): string | undefined {
   const problems: string[] = [];

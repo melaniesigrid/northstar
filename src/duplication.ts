@@ -1,4 +1,5 @@
 import type { ChangeSnapshot } from "./snapshot.js";
+import { meaningfulLines, type SourceLine } from "./source-lines.js";
 
 export interface Clone {
   file: string;
@@ -9,36 +10,18 @@ export interface Clone {
 }
 
 export interface DuplicationResult {
+  /** Repeated code. These block the change. */
   clones: Clone[];
-  /** Meaningful added lines that sit inside a clone. */
+  /** Repeated blocks made mostly of literals, such as lists and lookup tables. The reviewer judges these. */
+  dataClones: Clone[];
+  /** Added lines that sit inside a blocking clone. */
   duplicatedLines: number;
-}
-
-interface SourceLine {
-  number: number;
-  text: string;
 }
 
 /** A run of `minLines` consecutive meaningful lines, addressed by the index of its first line. */
 interface WindowLocation {
   file: string;
   index: number;
-}
-
-// Lines that repeat across files for good reasons and say nothing about copy-paste.
-const COMMENT = /^(\/\/|\/\*|\*|#[ !]|<!--)/;
-const IMPORT = /^(import\b|from\b|export \* from\b|\} from\b|#include\b|using\b|package\b)/;
-const HAS_SUBSTANCE = /[A-Za-z0-9].*[A-Za-z0-9]/;
-
-function meaningfulLines(content: string): SourceLine[] {
-  const lines: SourceLine[] = [];
-  content.split("\n").forEach((raw, index) => {
-    const text = raw.trim();
-    if (HAS_SUBSTANCE.test(text) && !COMMENT.test(text) && !IMPORT.test(text)) {
-      lines.push({ number: index + 1, text });
-    }
-  });
-  return lines;
 }
 
 function windowKey(lines: SourceLine[], index: number, size: number): string {
@@ -52,6 +35,10 @@ function windowKey(lines: SourceLine[], index: number, size: number): string {
  * Finds added code that repeats code elsewhere in the repo. Only windows made
  * entirely of added lines count, so duplication that existed before the change
  * is never held against it: the rule is "add no new debt".
+ *
+ * A repeat blocks only when it holds at least `minLines` lines of actual code.
+ * Repeated literals (status lists, theme tokens, seed rows) are common and
+ * often fine, so they are reported separately for a reviewer to judge.
  */
 export function findClones({ files, addedLines }: ChangeSnapshot, minLines: number): DuplicationResult {
   const sources = new Map<string, SourceLine[]>();
@@ -79,7 +66,7 @@ export function findClones({ files, addedLines }: ChangeSnapshot, minLines: numb
     return others.find((other) => !isAddedCode(other)) ?? others[0];
   };
 
-  const result: DuplicationResult = { clones: [], duplicatedLines: 0 };
+  const result: DuplicationResult = { clones: [], dataClones: [], duplicatedLines: 0 };
   for (const [file, added] of addedLines) {
     const lines = sources.get(file) ?? [];
     const runs: { start: number; end: number; origin: WindowLocation }[] = [];
@@ -96,13 +83,19 @@ export function findClones({ files, addedLines }: ChangeSnapshot, minLines: numb
     }
 
     for (const run of runs) {
-      result.duplicatedLines += run.end - run.start + 1;
-      result.clones.push({
+      const clone: Clone = {
         file,
         startLine: lineNumberAt({ file, index: run.start }),
         endLine: lineNumberAt({ file, index: run.end }),
         duplicateOf: { file: run.origin.file, line: lineNumberAt(run.origin) },
-      });
+      };
+      const codeLines = lines.slice(run.start, run.end + 1).filter((line) => !line.isData).length;
+      if (codeLines < minLines) {
+        result.dataClones.push(clone);
+        continue;
+      }
+      result.clones.push(clone);
+      result.duplicatedLines += run.end - run.start + 1;
     }
   }
   return result;

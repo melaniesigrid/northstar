@@ -10,7 +10,9 @@ function describeUsage(label: string, usage: Usage | undefined): string | undefi
 }
 
 function describeSlop(slop: SlopReport): string {
-  return `- Slop checks: ${slop.duplication.duplicatedLines} duplicated lines, ${slop.suppressions.length} new suppressions, ${slop.unreferenced.length} unreferenced new symbols`;
+  const blocking = `${slop.duplication.duplicatedLines} duplicated lines, ${slop.suppressions.length} new suppressions`;
+  const forReviewer = `${slop.unreferenced.length} unreferenced symbols, ${slop.duplication.dataClones.length} repeated data blocks`;
+  return `- Slop checks: ${blocking}. Sent to the reviewer: ${forReviewer}`;
 }
 
 function renderAttempt(attempt: Attempt): string {

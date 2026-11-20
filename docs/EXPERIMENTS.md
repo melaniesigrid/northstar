@@ -11,6 +11,42 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Commit replay on three repos with application code
+
+**Question.** On real TypeScript and JavaScript, how often do the slop checks block a commit, and is each block deserved?
+
+**Method.** Same replay as the entry below, on typecase (React, JS), quant-harness (TS), and shipshape-platform (TS monorepo with Next.js and Drizzle): 24 non-merge commits in total. Every flagged block was read and sorted into deserved, debatable, or false positive. The detector was then tightened and the replay repeated.
+
+**Result.**
+
+| Repo | Commits | Blocked at first | Blocked after tightening |
+| --- | --- | --- | --- |
+| typecase | 12 | 1 | 1 |
+| quant-harness | 3 | 1 | 1 |
+| shipshape-platform | 9 | 6 | 1 |
+| Total | 24 | 8 | 3 |
+
+The first pass over shipshape-platform flagged four kinds of repetition that are not copy-paste:
+
+- Multi-line import lists, where two files import the same names.
+- HTML and CSS embedded in template literals.
+- Literal data: status lists, theme tokens, seed rows.
+- Plain field mappings such as `title: row.title,` repeated between an insert and an update.
+
+The first two are now skipped. The last two no longer block. They are reported as repeated data and sent to the reviewer, because some are worth fixing: one status list is written out in three files when it could be imported.
+
+The three commits still blocked, all read by hand:
+
+- quant-harness: `mean` and `sd` helpers copied whole into a second file. Deserved.
+- shipshape-platform: the same five-line query and lookup built twice in one file. Deserved. The same commit also repeats tenant and board foreign key columns across Drizzle tables, which is debatable: a shared column helper would remove it, but many schemas are written this way.
+- typecase: one `eslint-disable-next-line react-hooks/exhaustive-deps`. Correctly detected. Whether it should block is a policy choice, which is what `maxNewSuppressions` is for.
+
+No remaining block is a false positive. The unreferenced check flagged a real unused export in typecase (`looksUsing`) and a mix of unused type exports and convention-based Drizzle relations in shipshape-platform, which supports keeping it advisory. HTTP verb handlers such as `GET` are now skipped as found by convention.
+
+One bug surfaced on the way: backticks inside regex literals threw off template literal tracking and exposed embedded CSS to the gate. Tracking now ignores backticks inside regexes and quoted strings.
+
+**Next.** 24 commits across three repos by one author is a small sample. The blocked rate (3 of 24) and the zero false positive count need checking on code by other people before either number is quoted anywhere. Moving repeated data out of the hard gate means the reviewer now carries that judgment, which only a live run can test.
+
 ## 2026-11-20: Commit replay on two real repos
 
 **Question.** How often would the slop checks have blocked real commits, and were those blocks deserved?
@@ -29,7 +65,7 @@ No suppressions and no unreferenced symbols were flagged in any of them. Every b
 
 Markup and stylesheets are now skipped by the slop checks. After that change the same replay blocks 0 of 9 and 0 of 32 commits.
 
-**Next.** This run exposed a false positive class but says little about precision on application code, because neither repo has any. The measurement still needs two or three TypeScript or Python repos with real history. The inline script duplication above is now invisible to the gate, which is a known gap.
+**Next.** This run exposed a false positive class but says little about precision on application code, because neither repo has any. See the entry above for that measurement. The inline script duplication is now invisible to the gate, which is a known gap.
 
 ## 2026-11-20: Suppression and unreferenced symbol checks
 

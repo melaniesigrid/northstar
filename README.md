@@ -43,9 +43,12 @@ Three checks run on every change before any configured gate. They need no setup 
 
 | Check | Catches | Outcome |
 | --- | --- | --- |
-| Duplication | Copy-pasted blocks | Blocks the change |
+| Duplication | Copy-pasted code | Blocks the change |
 | Suppressions | New `as any`, `@ts-ignore`, `eslint-disable` and similar | Blocks past `maxNewSuppressions` |
+| Repeated data | Copied lists of literals and field mappings | Passed to the reviewer to verify |
 | Unreferenced symbols | New top-level names nothing else uses | Passed to the reviewer to verify |
+
+The split is deliberate. A check blocks only where replaying real commit history showed its findings were deserved. Signals that are often fine in practice go to the reviewer, who can read the repo and decide.
 
 ### Duplication
 
@@ -59,9 +62,11 @@ New code repeats code the repo already has. Reuse or extract the original instea
 How it decides:
 
 - A clone is `minDuplicateLines` or more consecutive meaningful lines (default 5) that also appear elsewhere, in another file or the same one.
-- Blank lines, comments, import lines, and lines that are only brackets are skipped, and indentation is ignored.
+- Blank lines, comments, imports including multi-line name lists, and lines that are only brackets are skipped, and indentation is ignored.
+- Text inside a multi-line template literal is skipped. It is embedded HTML or CSS, not code.
 - Only blocks made entirely of added lines count. Duplication that existed before the change is never held against it.
 - A block the change adds twice is flagged in both places.
+- A clone blocks only if it holds at least `minDuplicateLines` lines of logic. Lines that just declare a value do not count toward that: list entries, `key: "value"` pairs, union members, and plain field mappings such as `title: row.title,`. A repeat made mostly of those goes to the reviewer as repeated data.
 - Prose, data, markup, and stylesheets are not checked: Markdown, JSON, YAML, lockfiles, HTML, XML, CSS and similar. Pages share a head and a footer and style rules share declarations, so repetition there is structure, not copy-paste.
 
 Limits: matching is textual, so a copy with renamed variables gets through. Catching those is the reviewer's job for now. Script or style blocks written inline in an HTML file are not checked either.

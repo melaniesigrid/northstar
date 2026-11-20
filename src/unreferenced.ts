@@ -21,8 +21,8 @@ const DECLARATIONS = [
   /^func\s+([A-Za-z_]\w*)/,
 ];
 
-/** Names a runtime or test runner finds by convention, with no reference in code. */
-const FOUND_BY_CONVENTION = /^(main$|[Tt]est)/;
+/** Names a runtime, test runner or web framework finds by convention, with no reference in code. */
+const FOUND_BY_CONVENTION = /^(main$|[Tt]est|(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$)/;
 
 const IDENTIFIER = /[A-Za-z_$][\w$]*/g;
 

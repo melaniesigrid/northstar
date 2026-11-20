@@ -1,4 +1,5 @@
 import { addedLinesOf, type ChangeSnapshot } from "./snapshot.js";
+import { STRING_LITERAL } from "./source-lines.js";
 
 export interface Suppression {
   file: string;
@@ -33,7 +34,6 @@ const COMMENT_PATTERNS = COMMENT_DIRECTIVES.map(
   (directive): [string, RegExp] => [directive, new RegExp(COMMENT_START + escapeForRegExp(directive))],
 );
 
-const STRING_LITERAL = /(["'`])(?:\\.|(?!\1).)*\1/g;
 const COMMENT_TEXT = /\/\/.*$|\/\*.*?\*\//g;
 
 /**

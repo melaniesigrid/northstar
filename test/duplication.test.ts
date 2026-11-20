@@ -26,6 +26,7 @@ describe("findClones", () => {
     expect(result).toEqual({
       duplicatedLines: 5,
       clones: [{ file: "src/copy.ts", startLine: 2, endLine: 6, duplicateOf: { file: "src/slug.ts", line: 1 } }],
+      dataClones: [],
     });
   });
 
@@ -107,6 +108,50 @@ describe("findClones", () => {
     };
 
     expect(findClones(snapshotWithAdded(files, "src/two.ts"), MIN_LINES).clones).toEqual([]);
+  });
+
+  it("does not treat a shared multi-line import list as copy-paste", () => {
+    const importList = ["import {", "  assessments,", "  boards,", "  cards,", "  projects,", "  rubrics,", '} from "./schema.js";'].join("\n");
+    const files = { "src/queries.ts": importList, "src/seed.ts": importList };
+
+    expect(findClones(snapshotWithAdded(files, "src/seed.ts"), MIN_LINES)).toMatchObject({ clones: [], dataClones: [] });
+  });
+
+  it("ignores text embedded in a multi-line template literal", () => {
+    const page = ["const html = `<!doctype html>", "<head>", "<meta charset='utf-8'>", "<title>Board</title>", "<link rel='icon' href='/i.png'>", "<link rel='stylesheet' href='/s.css'>", "</head>`;"].join("\n");
+    const files = { "src/boards.ts": page, "src/kanban.ts": page };
+
+    expect(findClones(snapshotWithAdded(files, "src/kanban.ts"), MIN_LINES)).toMatchObject({ clones: [], dataClones: [] });
+  });
+
+  it("keeps track of template literals past backticks in regexes and strings", () => {
+    const styles = ["const CODE = /`([^`]+)`/g;", 'const plain = text.replace(/`/g, "");', "const tick = '`';", "const CSS = `", ":root {", "--paper: #121a18;", "--card: #18211f;", "--ink: #e9ece7;", "--sea: #6fae9d;", "--ready: #79c497;", "}`;"].join("\n");
+    const files = { "scripts/page.mjs": styles, "scripts/prompts.mjs": styles };
+
+    expect(findClones(snapshotWithAdded(files, "scripts/prompts.mjs"), MIN_LINES)).toMatchObject({ clones: [], dataClones: [] });
+  });
+
+  it("reports repeated literal values separately, for a reviewer to judge", () => {
+    const statuses = ['"not_started",', '"in_progress",', '"met",', '"waived",', '"not_applicable",'].join("\n");
+    const files = { "src/types.ts": statuses, "src/row.tsx": statuses };
+
+    const result = findClones(snapshotWithAdded(files, "src/row.tsx"), MIN_LINES);
+
+    expect(result.clones).toEqual([]);
+    expect(result.duplicatedLines).toBe(0);
+    expect(result.dataClones).toEqual([
+      { file: "src/row.tsx", startLine: 1, endLine: 5, duplicateOf: { file: "src/types.ts", line: 1 } },
+    ]);
+  });
+
+  it("treats a repeated block of plain field mappings as data, not logic", () => {
+    const mapping = ["slug: seed.slug,", "name: seed.name,", "summary: seed.summary,", "status: seed.status,", "color: seed.color,", "productionUrl: seed.productionUrl ?? null,"].join("\n");
+    const files = { "src/seed.ts": mapping, "scripts/portfolio.mjs": mapping };
+
+    const result = findClones(snapshotWithAdded(files, "scripts/portfolio.mjs"), MIN_LINES);
+
+    expect(result.clones).toEqual([]);
+    expect(result.dataClones).toHaveLength(1);
   });
 
   it("does not match a run of identical lines against itself", () => {
