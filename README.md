@@ -62,9 +62,9 @@ How it decides:
 - Blank lines, comments, import lines, and lines that are only brackets are skipped, and indentation is ignored.
 - Only blocks made entirely of added lines count. Duplication that existed before the change is never held against it.
 - A block the change adds twice is flagged in both places.
-- Prose and data files (Markdown, JSON, YAML, lockfiles and similar) are not checked.
+- Prose, data, markup, and stylesheets are not checked: Markdown, JSON, YAML, lockfiles, HTML, XML, CSS and similar. Pages share a head and a footer and style rules share declarations, so repetition there is structure, not copy-paste.
 
-Limits: matching is textual, so a copy with renamed variables gets through. Catching those is the reviewer's job for now.
+Limits: matching is textual, so a copy with renamed variables gets through. Catching those is the reviewer's job for now. Script or style blocks written inline in an HTML file are not checked either.
 
 ### Suppressions
 

@@ -11,6 +11,26 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Commit replay on two real repos
+
+**Question.** How often would the slop checks have blocked real commits, and were those blocks deserved?
+
+**Method.** Cloned DueBook and ZipQuarry with their recent history. For each non-merge commit, restaged it on top of its parent and ran the same `checkSlop` path the pipeline uses, with default settings. Also scanned each repo with every line treated as new. Repeated the replay on NorthStar's own history.
+
+**Result.** Both repos turned out to be static sites: HTML, CSS, and a little JavaScript, with no TypeScript.
+
+| Repo | Commits replayed | Blocked | Cause |
+| --- | --- | --- | --- |
+| DueBook | 9 | 1 | Shared page head copied into a new page |
+| ZipQuarry | 32 | 10 | Shared page head, repeated CSS declarations, styles and scripts inlined in one page and also kept in shared files |
+| NorthStar | 3 | 0 | |
+
+No suppressions and no unreferenced symbols were flagged in any of them. Every block came from the duplication gate, and nearly all were structural: a new page has to repeat the head of the others, and CSS rules repeat declarations by design. A 31% block rate on a static site is a false positive problem, not a quality signal. One finding was real: about 50 lines of JavaScript live both inline in ZipQuarry's `index.html` and in `writing/article.js`.
+
+Markup and stylesheets are now skipped by the slop checks. After that change the same replay blocks 0 of 9 and 0 of 32 commits.
+
+**Next.** This run exposed a false positive class but says little about precision on application code, because neither repo has any. The measurement still needs two or three TypeScript or Python repos with real history. The inline script duplication above is now invisible to the gate, which is a known gap.
+
 ## 2026-11-20: Suppression and unreferenced symbol checks
 
 **Question.** Which other slop signals can be measured on added lines alone, with no language tooling, and precisely enough to act on?

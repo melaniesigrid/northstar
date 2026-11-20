@@ -143,6 +143,25 @@ describe("runPipeline", () => {
     expect(outcome.attempts[1]?.slop?.duplication.duplicatedLines).toBe(0);
   });
 
+  it("lets a new page repeat the markup every page shares", async () => {
+    const page = ["<head>", "<meta charset='utf-8'>", "<title>Site</title>", "<link rel='icon' href='/i.png'>", "<link rel='stylesheet' href='/s.css'>", "</head>"].join("\n");
+    const repoRoot = createTempRepo();
+    writeFileSync(path.join(repoRoot, "index.html"), page);
+    gitIn(repoRoot, "add", "-A");
+    gitIn(repoRoot, "commit", "-q", "-m", "add home page");
+    const writer = fakeAgent("a", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "feature.txt"), "about page\n");
+        writeFileSync(path.join(spec.cwd, "about.html"), page);
+        return "done";
+      },
+    ]);
+
+    const outcome = await runPipeline(pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW]), {}, repoRoot));
+
+    expect(outcome.status).toBe("passed");
+  });
+
   it("blocks a change that silences the type checker and names the line", async () => {
     const writer = fakeAgent("a", [
       (spec) => {

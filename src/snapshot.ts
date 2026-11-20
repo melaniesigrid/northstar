@@ -15,8 +15,15 @@ export interface AddedLine {
 }
 
 const MAX_FILE_BYTES = 512 * 1024;
-const DATA_AND_PROSE_EXTENSIONS = new Set([
+/**
+ * Files the slop checks leave alone. Prose and data repeat by nature. Markup
+ * and stylesheets do too: pages share a head and a footer, and rules share
+ * declarations, with no way to "reuse" them short of a build step. Replaying
+ * a static site's history blocked 10 of 32 commits before these were skipped.
+ */
+const SKIPPED_EXTENSIONS = new Set([
   ".md", ".mdx", ".txt", ".json", ".lock", ".yaml", ".yml", ".toml", ".csv", ".svg", ".snap",
+  ".html", ".htm", ".xml", ".css", ".scss", ".less",
 ]);
 
 async function readSource(file: string): Promise<string | undefined> {
@@ -29,7 +36,7 @@ async function readSource(file: string): Promise<string | undefined> {
 export async function loadSnapshot(cwd: string): Promise<ChangeSnapshot> {
   const files = new Map<string, string>();
   for (const file of await listTrackedFiles(cwd)) {
-    if (DATA_AND_PROSE_EXTENSIONS.has(path.extname(file))) continue;
+    if (SKIPPED_EXTENSIONS.has(path.extname(file))) continue;
     const content = await readSource(path.join(cwd, file));
     if (content !== undefined) files.set(file, content);
   }
