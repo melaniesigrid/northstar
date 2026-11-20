@@ -2,6 +2,8 @@
 
 NorthStar's shape follows published findings where they exist. This file lists each decision, what it rests on, and how sure we can be. None of it has been confirmed on our own benchmark yet, so each entry ends with how we will test it.
 
+The problem itself is well documented. A study of about 300,000 verified commits written by coding assistants found that 89.3% of the issues they introduced were code smells, not bugs or security holes, and that 22.7% of the tracked issues were still in the code at the latest revision (https://arxiv.org/abs/2603.28592). Maintainability is where generated code goes wrong, and it is what NorthStar checks.
+
 ## 1. The writer's brief is short
 
 **Decision.** The writer gets the task, the plan if there is one, hand-written repo rules, relevant helpers, a few constraints, and done-when checks. Nothing else.
@@ -61,13 +63,30 @@ NorthStar's shape follows published findings where they exist. This file lists e
 
 **How we will test it.** Compare first-attempt gate pass rates with and without the commands in the brief.
 
-## 7. Roles are separate processes, not subagents inside one CLI
+## 7. Test quality is checked, and test-first is not prescribed
+
+**Decision.** NorthStar does not tell the writer to follow test-driven development. It checks the tests a change adds, flags those that assert nothing or only that a value exists, and has the reviewer judge whether each test would fail if the behavior broke.
+
+**Evidence.** A study of 86,156 test-file patches from agent-authored pull requests found that 80.2% carry weak or no explicit checks on results. Among newly created test files, the share with strong checks ranged from 18% for OpenAI Codex to 67% for Claude Code. So this matters most for exactly the writer NorthStar is being shaped around. A second study of generated unit tests found the same gap: tests that run but lack strong assertions.
+
+On prescribing a workflow, the evidence points the other way. One study found that adding test-first instructions without targeted context raised regressions from 6.08% to 9.94%, worse than doing nothing, while surfacing the relevant tests cut them to 1.82%. Its authors conclude that supplying context works better than prescribing procedure. A separate study found large gains, 34 to 48 percentage points, when web app generation was given test-driven infrastructure. So tests as a feedback signal clearly help. What lacks support is prescribing the workflow by prompt alone.
+
+- https://arxiv.org/abs/2606.18168
+- https://arxiv.org/abs/2609.05978
+- https://arxiv.org/abs/2603.17973
+- https://arxiv.org/abs/2605.17242
+
+**Caveat.** Our check sees only the crudest weakness. A test with a strong-looking assertion on the wrong thing passes it. Mutation testing would catch more, at a real cost in time.
+
+**How we will test it.** Count weak tests per task for a raw Codex run against a pipeline run, and sample the reviewer's verdicts on the flagged ones.
+
+## 8. Roles are separate processes, not subagents inside one CLI
 
 **Decision.** Planner, writer, and reviewer are separate runs that NorthStar starts, each with its own context and permissions.
 
 **Reasoning.** Both Codex and Claude Code can spawn their own subagents. Those live inside one vendor's tool, share its judgment, and cannot be a different vendor. Running roles as separate processes is what makes cross-vendor review possible and keeps the reviewer from seeing the writer's reasoning.
 
-## 8. Checks decide, prompts only ask
+## 9. Checks decide, prompts only ask
 
 **Decision.** Every rule that matters is enforced by a check that runs on the diff. The prompt states the rule so the writer can avoid the rejection, but the pipeline never trusts the writer to have followed it.
 

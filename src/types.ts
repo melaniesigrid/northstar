@@ -61,6 +61,9 @@ export interface GateConfig {
   command: string;
 }
 
+/** The thresholds the slop checks need. Enough to run them with no config file at all. */
+export type SlopSettings = Pick<Config, "minDuplicateLines" | "maxNewSuppressions">;
+
 export interface Config {
   writer: string;
   reviewer: string;

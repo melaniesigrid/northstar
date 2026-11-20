@@ -18,6 +18,8 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Line budget check | Writer rebuttal round |
 | Convention profile and reuse search | Pull request creation |
 | Optional planner role | |
+| `northstar audit` for scoring past commits | |
+| Weak test signal for the reviewer | |
 | Duplication gate | |
 | Suppression gate | |
 | AI credit gate | |
@@ -43,6 +45,31 @@ The adapters are checked against each CLI's documented flags, and the Codex adap
 11. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
 
 A review that cannot be parsed is never treated as a pass.
+
+## Try it in one minute: audit your history
+
+`northstar audit` runs the slop checks over your recent commits and shows what the pipeline would have said about each one. It needs no config file and no agent, and it works in a scratch worktree, so your checkout is never touched.
+
+```bash
+northstar audit                 # the last 30 commits
+northstar audit --commits 100
+northstar audit --json          # the full findings, for your own analysis
+```
+
+```
+# NorthStar audit of 9 commits
+
+1 of 9 commits would have been blocked.
+
+Per 1,000 added lines of source (9342 lines in total):
+- Duplicated lines: 2.6
+- New suppressions: 0.0
+- AI credit notes: 0.0
+```
+
+Below the summary comes one row per commit, then the exact reason for each blocked commit with file and line. Merge commits and a repo's first commit are left out, since neither has a single parent to compare against.
+
+The audit is also how NorthStar measures itself: the same command scores a raw agent's output and the pipeline's output on the same tasks.
 
 ## Using NorthStar with Codex
 
@@ -124,6 +151,7 @@ These checks run on every change before any configured gate. They need no setup 
 | Suppressions | New `as any`, `@ts-ignore`, `eslint-disable` and similar | Blocks past `maxNewSuppressions` |
 | AI credits | Lines crediting an AI tool, in code or docs | Blocks the change |
 | Repeated data | Copied lists of literals and field mappings | Passed to the reviewer to verify |
+| Weak tests | New tests with no assertion, or that only check a value exists | Passed to the reviewer to verify |
 | Unreferenced symbols | New top-level names nothing else uses | Passed to the reviewer to verify |
 
 The split is deliberate. A check blocks only where replaying real commit history showed its findings were deserved. Signals that are often fine in practice go to the reviewer, who can read the repo and decide.
@@ -157,6 +185,12 @@ Silencing a check is the cheapest way for an agent to make a gate pass. This che
 - TypeScript escapes: `as any`, `: any`, and `any` as a type argument
 
 Text inside string literals and prose inside comments is ignored, so an error message that says "Expected: any of..." does not count.
+
+### Weak tests
+
+A test with no assertion runs the code and passes whatever the code does. A test that only checks a value is defined, or that nothing threw, is barely better. This check finds both in the tests a change adds, in JavaScript, TypeScript, and Python, and sends them to the reviewer with the reason.
+
+It does not block on its own, because a test can delegate its checks to a helper the check does not recognize. Skipped tests and `todo` placeholders are ignored.
 
 ### Unreferenced symbols
 

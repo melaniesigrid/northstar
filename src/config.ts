@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { EFFORTS, type Config, type Effort, type GateConfig } from "./types.js";
+import { EFFORTS, type Config, type Effort, type GateConfig, type SlopSettings } from "./types.js";
 
 export const CONFIG_FILE = "northstar.config.json";
 
@@ -10,6 +10,11 @@ const DEFAULTS = {
   maxNewSuppressions: 0,
   agentTimeoutMs: 15 * 60_000,
   gateTimeoutMs: 5 * 60_000,
+};
+
+export const DEFAULT_SLOP_SETTINGS: SlopSettings = {
+  minDuplicateLines: DEFAULTS.minDuplicateLines,
+  maxNewSuppressions: DEFAULTS.maxNewSuppressions,
 };
 
 type RawConfig = Record<string, unknown>;

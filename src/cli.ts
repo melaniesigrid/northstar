@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { getAdapter, listAdapters } from "./adapters/index.js";
-import { CONFIG_FILE, loadConfig } from "./config.js";
+import { auditCommits, renderAudit } from "./audit.js";
+import { CONFIG_FILE, DEFAULT_SLOP_SETTINGS, loadConfig } from "./config.js";
 import { findRepoRoot } from "./git.js";
 import { runPipeline } from "./pipeline.js";
 import { loadProfile, PROFILE_FILE, renderConventions, scanRepo } from "./profile.js";
@@ -12,12 +13,15 @@ import { renderReport } from "./report.js";
 
 const USAGE = `Usage:
   northstar run "<task>" [--config <file>] [--base <git ref>]
+  northstar audit [--commits <n>] [--json]
   northstar profile
   northstar doctor
 
 run      Writes the change in an isolated worktree, runs the gates, then has a
          second agent review it. Exits 0 when the change passed, 1 when a human
          needs to look.
+audit    Scores the repo's recent commits with the slop checks. Needs no
+         config and no agent, and never touches your checkout.
 profile  Scans the repo's conventions and writes them to ${PROFILE_FILE}
          for you to review, edit and commit. Your notes are kept on rescans.
 doctor   Shows which agent CLIs are installed.`;
@@ -32,6 +36,21 @@ async function doctor(): Promise<number> {
     const { installed, version } = await adapter.detect();
     console.log(`${adapter.id}: ${installed ? `installed (${version})` : "not found on PATH"}`);
   }
+  return 0;
+}
+
+const DEFAULT_AUDIT_COMMITS = 30;
+
+async function audit(options: { commits?: string; json?: boolean }): Promise<number> {
+  const maxCommits = options.commits === undefined ? DEFAULT_AUDIT_COMMITS : Number(options.commits);
+  if (!Number.isInteger(maxCommits) || maxCommits < 1) throw new Error("--commits must be a whole number, 1 or more.");
+
+  const repoRoot = await findRepoRoot(process.cwd());
+  const configFile = path.join(repoRoot, CONFIG_FILE);
+  const hasConfig = await access(configFile).then(() => true, () => false);
+  const settings = hasConfig ? await loadConfig(configFile) : DEFAULT_SLOP_SETTINGS;
+  const report = await auditCommits(repoRoot, settings, maxCommits, newRunId());
+  console.log(options.json ? JSON.stringify(report, null, 2) : renderAudit(report));
   return 0;
 }
 
@@ -74,6 +93,8 @@ async function main(): Promise<number> {
     options: {
       config: { type: "string" },
       base: { type: "string", default: "HEAD" },
+      commits: { type: "string" },
+      json: { type: "boolean" },
     },
   });
   const [command, ...rest] = positionals;
@@ -81,6 +102,7 @@ async function main(): Promise<number> {
 
   if (command === "doctor") return doctor();
   if (command === "profile") return profile();
+  if (command === "audit") return audit(values);
   if (command === "run" && task) return run(task, values);
   console.error(USAGE);
   return 2;
