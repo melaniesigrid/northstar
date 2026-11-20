@@ -5,7 +5,9 @@ import {
   commitStaged,
   createWorktree,
   discardUnstaged,
+  isUnchanged,
   removeWorktree,
+  removeWorktreeAndBranch,
   stageAll,
   stagedDiff,
   stagedStat,
@@ -52,8 +54,9 @@ export interface RunOutcome {
   runId: string;
   task: string;
   status: "passed" | "needs_human";
-  branch: string;
-  /** Set when the run stopped short, so a human can inspect the work in place. */
+  /** Missing when the run ended with nothing written, since its branch is removed then. */
+  branch?: string;
+  /** Set when the run stopped short with work in it, so a human can inspect that work in place. */
   worktreePath?: string;
   sameVendorReview: boolean;
   setupFailure?: string;
@@ -232,6 +235,11 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
     }
     if (!attempt.failure.retryable) break;
     feedback = attempt.failure.detail;
+  }
+  // A run that wrote nothing has nothing to inspect, so it should not leave a worktree and a branch behind.
+  if (await isUnchanged(worktree.path)) {
+    await removeWorktreeAndBranch(repoRoot, worktree);
+    return { ...outcome, branch: undefined, worktreePath: undefined };
   }
   return outcome;
 }

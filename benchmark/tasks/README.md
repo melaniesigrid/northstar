@@ -7,7 +7,7 @@ northstar bench                     # runs every task in this folder
 northstar bench --tasks other/dir   # runs tasks kept somewhere else
 ```
 
-The report prints to the terminal and is saved with the full results under `.northstar/bench/<id>/`. A run uses your agents for every task, twice, so it costs real usage and takes a while.
+The report prints to the terminal and is saved with the full results under `.northstar/bench/<id>/`. A run uses your agents for every task, twice, so it costs real usage and takes a while. Before the first task it asks each configured agent for a one-word answer and stops if one is signed out or rejects its model name.
 
 ## Format
 

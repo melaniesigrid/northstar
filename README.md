@@ -21,6 +21,7 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | `northstar audit` for scoring past commits | |
 | `northstar bench` for comparing the writer alone with the pipeline | |
 | Weak test signal for the reviewer | |
+| `northstar doctor --live` sign-in check | |
 | Duplication gate | |
 | Suppression gate | |
 | AI credit gate | |
@@ -227,6 +228,7 @@ npm run build
 npm link              # makes the `northstar` command available
 
 northstar doctor      # shows which agent CLIs are installed
+northstar doctor --live   # also checks that each one is signed in
 northstar profile     # scans the repo's conventions into northstar.profile.json
 ```
 
@@ -253,6 +255,28 @@ northstar run "Add a slugify helper to src/strings.ts with tests"
 The report prints to the terminal and is saved with a JSON log under `.northstar/runs/<run id>/`. Add `.northstar/` to that repo's `.gitignore`.
 
 Exit codes: `0` the change passed and is committed on its branch, `1` a human needs to look, `2` usage or config error.
+
+A run that stops for a human leaves its worktree in place so you can read the work. The one exception is a run in which no file was changed, for example because the writer was signed out. That run has nothing to read, so its worktree and branch are removed and the report says so.
+
+### Check that your agents are signed in
+
+A CLI can be installed and still be signed out, and nothing shows it until the first model call. Claude Code, for one, exits 0 and labels the result a success while the answer is an authentication error.
+
+```bash
+northstar doctor --live
+```
+
+```text
+claude-code: installed (2.1.330 (Claude Code))
+codex: installed (codex-cli 0.171.0)
+
+codex (writer): ready
+claude-code (planner, reviewer): NOT READY. Authentication error
+```
+
+It asks each agent for a one-word answer, read-only, with the model your config names, so a mistyped model name shows up here too. Roles that share an agent and a model are checked with one call. In a repo without a config it checks every installed agent. It exits 1 when any agent is not ready.
+
+`northstar bench` runs the same check before its first task and refuses to start when an agent is not ready, because a benchmark with a signed-out agent would spend its whole run producing a table of failures.
 
 ## Config reference
 

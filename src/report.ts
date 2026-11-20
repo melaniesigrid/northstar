@@ -39,8 +39,10 @@ function renderResult(outcome: RunOutcome): string {
   if (outcome.status === "passed") {
     return `PASSED on attempt ${outcome.attempts.length}. The change is committed on \`${outcome.branch}\`.`;
   }
-  const where = outcome.worktreePath ? ` Inspect the work in ${outcome.worktreePath}.` : "";
-  return `NEEDS A HUMAN. Nothing was committed.${where}`;
+  const where = outcome.worktreePath
+    ? `Inspect the work in ${outcome.worktreePath}.`
+    : "No files were changed, so the run's worktree and branch were removed.";
+  return `NEEDS A HUMAN. Nothing was committed. ${where}`;
 }
 
 export function renderReport(outcome: RunOutcome): string {

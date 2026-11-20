@@ -36,6 +36,17 @@ export async function removeWorktree(repoRoot: string, worktreePath: string): Pr
   await git(repoRoot, ["worktree", "remove", "--force", worktreePath]);
 }
 
+/** Whether the checkout has no staged, unstaged or untracked changes. Ignored files do not count. */
+export async function isUnchanged(cwd: string): Promise<boolean> {
+  return (await git(cwd, ["status", "--porcelain"])).trim() === "";
+}
+
+/** For a run that produced nothing: leaves no trace of it in the repo. */
+export async function removeWorktreeAndBranch(repoRoot: string, worktree: Worktree): Promise<void> {
+  await removeWorktree(repoRoot, worktree.path);
+  await git(repoRoot, ["branch", "-D", worktree.branch]);
+}
+
 /** A scratch checkout on no branch, for reading history without touching the user's own checkout. */
 export async function createDetachedWorktree(repoRoot: string, id: string, ref = "HEAD"): Promise<string> {
   const worktreePath = path.join(os.tmpdir(), "northstar", id);
