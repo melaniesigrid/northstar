@@ -14,8 +14,16 @@ const OUTPUT_FORMAT = `Reply with one JSON object and nothing else:
 {"findings": [{"severity": "blocking" | "advisory", "rule": "<one of the six rules>", "file": "<path>", "line": <number>, "explanation": "<one or two sentences a human can verify>", "suggestedFix": "<optional>"}]}
 Use "blocking" only for problems a careful human reviewer would refuse to merge. Return {"findings": []} when the diff is clean.`;
 
-/** `hints` are signals from automated checks that the reviewer should verify, not conclusions. */
-export function buildReviewPrompt(task: string, diff: string, hints: string[] = []): string {
+export interface ReviewRequest {
+  task: string;
+  diff: string;
+  /** How this repo is written, so "naming" and "reuse" are judged against it. */
+  conventions?: string;
+  /** Signals from automated checks for the reviewer to verify. They are not conclusions. */
+  hints?: string[];
+}
+
+export function buildReviewPrompt({ task, diff, conventions, hints = [] }: ReviewRequest): string {
   const shownDiff =
     diff.length <= MAX_DIFF_CHARS
       ? diff
@@ -23,11 +31,14 @@ export function buildReviewPrompt(task: string, diff: string, hints: string[] = 
   return [
     "You are reviewing a change written by another coding agent. You did not write it. Do not edit any files.",
     `The task was:\n${task}`,
+    conventions,
     RUBRIC,
     ...hints,
     OUTPUT_FORMAT,
     `The staged diff:\n${shownDiff}`,
-  ].join("\n\n");
+  ]
+    .filter((section) => section !== undefined)
+    .join("\n\n");
 }
 
 export type ReviewOutcome = { ok: true; findings: Finding[] } | { ok: false; reason: string };

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { groupNumbersByFile } from "../src/git.js";
 import type { ChangeSnapshot } from "../src/snapshot.js";
 import type { AgentAdapter, Config, RunResult, RunSpec } from "../src/types.js";
 
@@ -74,13 +75,10 @@ export function writeFileTurn(file: string, content: string): Turn {
 
 /** A snapshot of `files` in which every line of the named files was added by the change. */
 export function snapshotWithAdded(files: Record<string, string>, ...addedFiles: string[]): ChangeSnapshot {
-  const addedLines = new Map(
-    addedFiles.map((name) => {
-      const lineCount = (files[name] ?? "").split("\n").length;
-      return [name, new Set(Array.from({ length: lineCount }, (_, index) => index + 1))] as const;
-    }),
+  const addedText = addedFiles.flatMap((file) =>
+    (files[file] ?? "").split("\n").map((text, index) => ({ file, number: index + 1, text })),
   );
-  return { files: new Map(Object.entries(files)), addedLines };
+  return { files: new Map(Object.entries(files)), addedLines: groupNumbersByFile(addedText), addedText };
 }
 
 export const CLEAN_REVIEW: Turn = () => '{"findings": []}';

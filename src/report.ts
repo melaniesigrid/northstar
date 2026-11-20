@@ -1,3 +1,4 @@
+import { formatHelpers } from "./helper-index.js";
 import { formatFindings } from "./review.js";
 import type { Attempt, RunOutcome } from "./pipeline.js";
 import type { SlopReport } from "./slop.js";
@@ -10,7 +11,7 @@ function describeUsage(label: string, usage: Usage | undefined): string | undefi
 }
 
 function describeSlop(slop: SlopReport): string {
-  const blocking = `${slop.duplication.duplicatedLines} duplicated lines, ${slop.suppressions.length} new suppressions`;
+  const blocking = `${slop.duplication.duplicatedLines} duplicated lines, ${slop.suppressions.length} new suppressions, ${slop.attribution.length} AI credit notes`;
   const forReviewer = `${slop.unreferenced.length} unreferenced symbols, ${slop.duplication.dataClones.length} repeated data blocks`;
   return `- Slop checks: ${blocking}. Sent to the reviewer: ${forReviewer}`;
 }
@@ -53,6 +54,9 @@ export function renderReport(outcome: RunOutcome): string {
     `Review: ${review}.`,
   ];
   if (outcome.setupFailure) sections.push(outcome.setupFailure);
+  if (outcome.suggestedHelpers.length > 0) {
+    sections.push(`Existing helpers pointed out to the writer:\n${formatHelpers(outcome.suggestedHelpers)}`);
+  }
   sections.push(...outcome.attempts.map(renderAttempt));
   return `${sections.join("\n\n")}\n`;
 }

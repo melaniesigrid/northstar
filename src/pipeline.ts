@@ -1,3 +1,4 @@
+import { gatherContext, type RepoContext } from "./context.js";
 import { exec, tail } from "./exec.js";
 import { runGate, type GateResult } from "./gates.js";
 import {
@@ -9,6 +10,7 @@ import {
   stagedDiff,
   stagedStat,
 } from "./git.js";
+import { formatHelpers, type Helper } from "./helper-index.js";
 import { buildReviewPrompt, formatFindings, parseFindings } from "./review.js";
 import { checkSlop, describeBlockingSlop, reviewerHints, type SlopReport } from "./slop.js";
 import type { AgentAdapter, Config, Finding, Usage } from "./types.js";
@@ -52,6 +54,8 @@ export interface RunOutcome {
   worktreePath?: string;
   sameVendorReview: boolean;
   setupFailure?: string;
+  /** Existing helpers the writer was pointed to before it started. */
+  suggestedHelpers: Helper[];
   attempts: Attempt[];
 }
 
@@ -59,10 +63,18 @@ const WRITER_RULES = `Rules for this change:
 - Change only what the task needs.
 - Reuse existing helpers and follow the conventions already in this repo.
 - Do not add comments that restate the code.
+- Leave no trace of AI authorship: no generated-by notes, no AI co-author lines, and no mention of an assistant in code, comments or docs.
 - Do not commit. Leave your changes in the working directory.`;
 
-function buildWriterPrompt(task: string, feedback: string | undefined): string {
-  const parts = [task, WRITER_RULES];
+function buildWriterPrompt(task: string, context: RepoContext, feedback: string | undefined): string {
+  const parts = [task];
+  if (context.conventions) parts.push(context.conventions);
+  if (context.helpers.length > 0) {
+    parts.push(
+      `Existing helpers that look relevant. Reuse them instead of writing new ones:\n${formatHelpers(context.helpers)}`,
+    );
+  }
+  parts.push(WRITER_RULES);
   if (feedback) {
     parts.push(`Your previous attempt was rejected. Fix this and keep the rest of your work:\n${feedback}`);
   }
@@ -82,6 +94,7 @@ async function runSetup(config: Config, cwd: string): Promise<string | undefined
 async function runAttempt(
   input: PipelineInput,
   cwd: string,
+  context: RepoContext,
   number: number,
   feedback: string | undefined,
 ): Promise<Attempt> {
@@ -93,7 +106,7 @@ async function runAttempt(
   };
 
   const written = await input.writer.run({
-    prompt: buildWriterPrompt(input.task, feedback),
+    prompt: buildWriterPrompt(input.task, context, feedback),
     cwd,
     model: config.writerModel,
     readOnly: false,
@@ -136,7 +149,12 @@ async function runAttempt(
   }
 
   const reviewed = await input.reviewer.run({
-    prompt: buildReviewPrompt(input.task, await stagedDiff(cwd), reviewerHints(attempt.slop)),
+    prompt: buildReviewPrompt({
+      task: input.task,
+      diff: await stagedDiff(cwd),
+      conventions: context.conventions,
+      hints: reviewerHints(attempt.slop),
+    }),
     cwd,
     model: config.reviewerModel,
     readOnly: true,
@@ -179,15 +197,19 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
     branch: worktree.branch,
     worktreePath: worktree.path,
     sameVendorReview: input.writer.vendor === input.reviewer.vendor,
+    suggestedHelpers: [],
     attempts: [],
   };
 
   outcome.setupFailure = await runSetup(config, worktree.path);
   if (outcome.setupFailure) return outcome;
 
+  const context = await gatherContext(worktree.path, task);
+  outcome.suggestedHelpers = context.helpers;
+
   let feedback: string | undefined;
   for (let number = 1; number <= config.maxIterations; number++) {
-    const attempt = await runAttempt(input, worktree.path, number, feedback);
+    const attempt = await runAttempt(input, worktree.path, context, number, feedback);
     outcome.attempts.push(attempt);
     if (!attempt.failure) {
       await commitStaged(worktree.path, commitMessage(task));

@@ -62,33 +62,48 @@ export async function listTrackedFiles(cwd: string): Promise<string[]> {
 
 const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
 
-/** Reads a zero-context unified diff into the line numbers each file gained. */
-export function parseAddedLines(diff: string): Map<string, Set<number>> {
-  const addedByFile = new Map<string, Set<number>>();
-  let current: Set<number> | undefined;
-  let previousLine = "";
-  for (const line of diff.split("\n")) {
-    // "+++ " is a file header only right after "--- "; elsewhere it is added content.
-    if (line.startsWith("+++ ") && previousLine.startsWith("--- ")) {
-      current = undefined;
-      if (line !== "+++ /dev/null") {
-        current = new Set();
-        addedByFile.set(line.slice("+++ b/".length), current);
-      }
-    }
-    const hunk = HUNK_HEADER.exec(line);
-    if (hunk && current) {
-      const start = Number(hunk[1]);
-      const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-      for (let offset = 0; offset < count; offset++) current.add(start + offset);
-    }
-    previousLine = line;
-  }
-  return addedByFile;
+export interface AddedLine {
+  file: string;
+  number: number;
+  text: string;
 }
 
-export async function stagedAddedLines(cwd: string): Promise<Map<string, Set<number>>> {
-  return parseAddedLines(await git(cwd, ["diff", "--cached", "--unified=0", "--no-color"]));
+/** Reads a zero-context unified diff into every line the change added, across all files. */
+export function parseAddedText(diff: string): AddedLine[] {
+  const added: AddedLine[] = [];
+  let file: string | undefined;
+  let nextNumber = 0;
+  // "+++ " names a file only in the header before a file's first hunk; later it is added content.
+  let inFileHeader = true;
+  for (const line of diff.split("\n")) {
+    const hunk = HUNK_HEADER.exec(line);
+    if (line.startsWith("diff --git ")) {
+      inFileHeader = true;
+    } else if (inFileHeader && line.startsWith("+++ ")) {
+      file = line === "+++ /dev/null" ? undefined : line.slice("+++ b/".length);
+    } else if (hunk) {
+      inFileHeader = false;
+      nextNumber = Number(hunk[1]);
+    } else if (!inFileHeader && line.startsWith("+") && file !== undefined) {
+      added.push({ file, number: nextNumber, text: line.slice(1) });
+      nextNumber += 1;
+    }
+  }
+  return added;
+}
+
+export function groupNumbersByFile(added: AddedLine[]): Map<string, Set<number>> {
+  const byFile = new Map<string, Set<number>>();
+  for (const { file, number } of added) {
+    const numbers = byFile.get(file) ?? new Set<number>();
+    numbers.add(number);
+    byFile.set(file, numbers);
+  }
+  return byFile;
+}
+
+export async function stagedAddedText(cwd: string): Promise<AddedLine[]> {
+  return parseAddedText(await git(cwd, ["diff", "--cached", "--unified=0", "--no-color"]));
 }
 
 /** Resets the working tree to the staged state, dropping anything written since staging. */

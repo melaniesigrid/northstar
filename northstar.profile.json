@@ -1,0 +1,28 @@
+{
+  "extensions": [
+    {
+      "extension": ".ts",
+      "files": 36
+    }
+  ],
+  "fileNaming": {
+    ".ts": "kebab-case"
+  },
+  "tests": {
+    "pattern": "*.test.ts",
+    "location": "in the top-level test/ folder"
+  },
+  "directories": [
+    "src/",
+    "test/"
+  ],
+  "libraries": [
+    "typescript",
+    "vitest"
+  ],
+  "notes": [
+    "No runtime dependencies. Use Node built-ins.",
+    "Each slop check is a pure function over a ChangeSnapshot, with its own test file.",
+    "A quality check may block only if replaying real commit history showed its findings were deserved. Otherwise it reports to the reviewer. House rules, such as the AI credit gate, block by policy."
+  ]
+}

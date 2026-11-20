@@ -11,6 +11,24 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Convention scan and reuse search on four repos
+
+**Question.** Does a scan of file names and manifests produce conventions that are true of the repo, and does a keyword search over declarations surface the helper a task should reuse?
+
+**Method.** Ran the scan and the helper search on NorthStar, typecase, quant-harness, and shipshape-platform, with one realistic task per repo. Read the output against each repo.
+
+**Result.** The scan was right about naming, test layout, folders, and libraries after three fixes the first run exposed:
+
+- Fonts were counted as code in typecase ("most code is in .otf"). The scan now uses readable source text only.
+- A lone `.env.example` showed up as a language. Extensions under 5% of source files are left out.
+- Helpers private to a file were missing from the index.
+
+The third one mattered. quant-harness has `mean` and `sd` copied into two files, which the duplication gate caught earlier. For a task about "the standard deviation and mean of returns", the search now lists both copies of `mean`, marked as not exported. A writer shown that list has a reason to reuse the helper before the gate ever fires. `sd` is not found from "standard deviation", which is the limit of matching on keywords.
+
+Other spot checks: "add a readiness score bar to the project page" put `ScoreBar` first in shipshape-platform, and "add a share link" found `useShareable` in typecase once a word was allowed to match a longer form of itself.
+
+**Next.** One task per repo is an anecdote. Whether suggested helpers get reused, and whether stated conventions change what a writer produces, can only be measured with live agents on the benchmark tasks. That is what the seed benchmark is for.
+
 ## 2026-11-20: Commit replay on three repos with application code
 
 **Question.** On real TypeScript and JavaScript, how often do the slop checks block a commit, and is each block deserved?
