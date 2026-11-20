@@ -1,0 +1,9 @@
+{
+  "writer": "claude-code",
+  "reviewer": "codex",
+  "setup": ["npm ci"],
+  "gates": [
+    { "name": "typecheck", "command": "npm run typecheck" },
+    { "name": "test", "command": "npm test" }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "northstar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent-agnostic quality pipeline for coding agents. Any agent writes, gates and a second vendor verify.",
+  "type": "module",
+  "bin": {
+    "northstar": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
