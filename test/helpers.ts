@@ -31,6 +31,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     reviewer: "fake-reviewer",
     maxIterations: 3,
     maxChangedLines: 400,
+    minDuplicateLines: 5,
     setup: [],
     gates: [{ name: "exists", command: "test -f feature.txt" }],
     agentTimeoutMs: 10_000,
@@ -70,3 +71,13 @@ export function writeFileTurn(file: string, content: string): Turn {
 }
 
 export const CLEAN_REVIEW: Turn = () => '{"findings": []}';
+
+/** A small helper function used as "existing code" that later changes may copy. */
+export const SLUGIFY_SOURCE = [
+  "export function slugify(input: string): string {",
+  "  const lowered = input.toLowerCase();",
+  "  const dashed = lowered.replace(/[^a-z0-9]+/g, '-');",
+  "  const trimmed = dashed.replace(/^-|-$/g, '');",
+  "  return trimmed;",
+  "}",
+].join("\n");
