@@ -59,6 +59,8 @@ export interface Config {
   reviewerModel?: string;
   maxIterations: number;
   maxChangedLines: number;
+  /** Added code that repeats this many consecutive meaningful lines from elsewhere is blocked. */
+  minDuplicateLines: number;
   /** Commands run once in the fresh worktree, such as installing dependencies. */
   setup: string[];
   gates: GateConfig[];

@@ -6,6 +6,7 @@ export const CONFIG_FILE = "northstar.config.json";
 const DEFAULTS = {
   maxIterations: 3,
   maxChangedLines: 400,
+  minDuplicateLines: 5,
   agentTimeoutMs: 15 * 60_000,
   gateTimeoutMs: 5 * 60_000,
 };
@@ -67,6 +68,7 @@ export function parseConfig(raw: unknown): Config {
     reviewerModel: optionalString(config, "reviewerModel"),
     maxIterations: positiveInteger(config, "maxIterations"),
     maxChangedLines: positiveInteger(config, "maxChangedLines"),
+    minDuplicateLines: positiveInteger(config, "minDuplicateLines"),
     setup: parseSetup(config.setup),
     gates: parseGates(config.gates),
     agentTimeoutMs: positiveInteger(config, "agentTimeoutMs"),

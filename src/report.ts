@@ -13,6 +13,7 @@ function renderAttempt(attempt: Attempt): string {
   const lines = [
     `## Attempt ${attempt.number}`,
     `- Changed: ${attempt.filesChanged.length} files, ${attempt.linesChanged} lines`,
+    attempt.duplication && `- Duplicated lines added: ${attempt.duplication.duplicatedLines}`,
     `- Gates: ${gates || "not reached"}`,
     describeUsage("Writer", attempt.writerUsage),
     describeUsage("Reviewer", attempt.reviewerUsage),

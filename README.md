@@ -10,11 +10,12 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 
 | Built | Not built yet |
 | --- | --- |
-| Isolated git worktree per run | Slop gate (duplication, dead code, complexity deltas) |
+| Isolated git worktree per run | Dead code and complexity checks |
 | Claude Code and Codex adapters behind one interface | Repo convention profile and reuse search |
 | Setup commands and configurable hard gates | Slop score and benchmark |
 | Line budget check | Writer rebuttal round |
-| Cross-vendor review with structured findings | Pull request creation |
+| Duplication gate | Pull request creation |
+| Cross-vendor review with structured findings | |
 | Retry loop with exact feedback, capped attempts | |
 | Run report and JSON audit log | |
 
@@ -26,12 +27,32 @@ The adapters are checked against each CLI's documented flags and output, and the
 2. Setup commands run once, for example `npm ci`.
 3. The writer agent makes the change.
 4. The change is staged and checked against the line budget.
-5. Each gate runs in order. A gate is any command that exits 0 on success.
-6. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
-7. A failed gate or a blocking finding goes back to the writer with the exact reason.
-8. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
+5. The duplication gate compares the added code with the rest of the repo.
+6. Each configured gate runs in order. A gate is any command that exits 0 on success.
+7. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
+8. A failed check or a blocking finding goes back to the writer with the exact reason.
+9. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
 
 A review that cannot be parsed is never treated as a pass.
+
+## Duplication gate
+
+The gate blocks added code that repeats code already in the repo, and tells the writer where the original lives:
+
+```
+New code repeats code the repo already has. Reuse or extract the original instead:
+- src/copy.ts:1-5 repeats src/slug.ts:1
+```
+
+How it decides:
+
+- A clone is `minDuplicateLines` or more consecutive meaningful lines (default 5) that also appear elsewhere, in another file or the same one.
+- Blank lines, comments, import lines, and lines that are only brackets are skipped, and indentation is ignored.
+- Only blocks made entirely of added lines count. Duplication that existed before the change is never held against it.
+- A block the change adds twice is flagged in both places.
+- Prose and data files (Markdown, JSON, YAML, lockfiles and similar) are not checked.
+
+Limits: matching is textual, so a copy with renamed variables gets through. Catching those is the reviewer's job for now.
 
 ## Quick start
 
@@ -80,6 +101,7 @@ Exit codes: `0` the change passed and is committed on its branch, `1` a human ne
 | `writerModel`, `reviewerModel` | no | CLI default | Passed to the agent's `--model` flag |
 | `maxIterations` | no | `3` | Writer attempts before a human takes over |
 | `maxChangedLines` | no | `400` | Line budget for one change |
+| `minDuplicateLines` | no | `5` | Length of a repeated block that counts as a clone |
 | `agentTimeoutMs` | no | `900000` | Time limit for one agent turn |
 | `gateTimeoutMs` | no | `300000` | Time limit for one gate or setup command |
 

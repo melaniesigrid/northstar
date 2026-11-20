@@ -56,6 +56,41 @@ export async function stagedDiff(cwd: string): Promise<string> {
   return git(cwd, ["diff", "--cached"]);
 }
 
+export async function listTrackedFiles(cwd: string): Promise<string[]> {
+  return (await git(cwd, ["ls-files", "-z"])).split("\0").filter(Boolean);
+}
+
+const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
+
+/** Reads a zero-context unified diff into the line numbers each file gained. */
+export function parseAddedLines(diff: string): Map<string, Set<number>> {
+  const addedByFile = new Map<string, Set<number>>();
+  let current: Set<number> | undefined;
+  let previousLine = "";
+  for (const line of diff.split("\n")) {
+    // "+++ " is a file header only right after "--- "; elsewhere it is added content.
+    if (line.startsWith("+++ ") && previousLine.startsWith("--- ")) {
+      current = undefined;
+      if (line !== "+++ /dev/null") {
+        current = new Set();
+        addedByFile.set(line.slice("+++ b/".length), current);
+      }
+    }
+    const hunk = HUNK_HEADER.exec(line);
+    if (hunk && current) {
+      const start = Number(hunk[1]);
+      const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+      for (let offset = 0; offset < count; offset++) current.add(start + offset);
+    }
+    previousLine = line;
+  }
+  return addedByFile;
+}
+
+export async function stagedAddedLines(cwd: string): Promise<Map<string, Set<number>>> {
+  return parseAddedLines(await git(cwd, ["diff", "--cached", "--unified=0", "--no-color"]));
+}
+
 /** Resets the working tree to the staged state, dropping anything written since staging. */
 export async function discardUnstaged(cwd: string): Promise<void> {
   await git(cwd, ["checkout", "--", "."]);

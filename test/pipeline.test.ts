@@ -9,15 +9,21 @@ import {
   fakeAgent,
   gitIn,
   newRunId,
+  SLUGIFY_SOURCE,
   testConfig,
   writeFileTurn,
 } from "./helpers.js";
 
-function pipelineInput(writer: AgentAdapter, reviewer: AgentAdapter, config: Partial<Config> = {}): PipelineInput {
+function pipelineInput(
+  writer: AgentAdapter,
+  reviewer: AgentAdapter,
+  config: Partial<Config> = {},
+  repoRoot = createTempRepo(),
+): PipelineInput {
   return {
     task: "Add feature.txt",
     runId: newRunId(),
-    repoRoot: createTempRepo(),
+    repoRoot,
     baseRef: "HEAD",
     config: testConfig(config),
     writer,
@@ -113,6 +119,28 @@ describe("runPipeline", () => {
 
     expect(outcome.attempts[0]?.failure?.stage).toBe("scope");
     expect(outcome.attempts[0]?.gates).toEqual([]);
+  });
+
+  it("blocks new code that copies an existing helper and tells the writer where the original is", async () => {
+    const helper = `${SLUGIFY_SOURCE}\n`;
+    const repoRoot = createTempRepo();
+    writeFileSync(path.join(repoRoot, "slug.ts"), helper);
+    gitIn(repoRoot, "add", "-A");
+    gitIn(repoRoot, "commit", "-q", "-m", "add slugify");
+    const writer = fakeAgent("a", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "feature.txt"), "uses a slug\n");
+        writeFileSync(path.join(spec.cwd, "copy.ts"), helper);
+        return "done";
+      },
+      writeFileTurn("copy.ts", 'export { slugify } from "./slug.js";\n'),
+    ]);
+
+    const outcome = await runPipeline(pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW]), {}, repoRoot));
+
+    expect(outcome.attempts.map((attempt) => attempt.failure?.stage)).toEqual(["slop", undefined]);
+    expect(writer.prompts[1]).toContain("copy.ts:1-5 repeats slug.ts:1");
+    expect(outcome.attempts[1]?.duplication?.duplicatedLines).toBe(0);
   });
 
   it("stops before any agent runs when setup fails", async () => {

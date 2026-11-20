@@ -1,3 +1,4 @@
+import { checkDuplication, formatClones, type DuplicationResult } from "./duplication.js";
 import { exec, tail } from "./exec.js";
 import { runGate, type GateResult } from "./gates.js";
 import {
@@ -23,7 +24,7 @@ export interface PipelineInput {
 }
 
 export interface AttemptFailure {
-  stage: "writer" | "scope" | "gate" | "review";
+  stage: "writer" | "scope" | "slop" | "gate" | "review";
   detail: string;
   /** False when another writer attempt cannot fix the problem. */
   retryable: boolean;
@@ -33,6 +34,8 @@ export interface Attempt {
   number: number;
   filesChanged: string[];
   linesChanged: number;
+  /** Absent when the attempt stopped before the duplication check. */
+  duplication?: DuplicationResult;
   gates: GateResult[];
   findings: Finding[];
   writerUsage?: Usage;
@@ -116,6 +119,14 @@ async function runAttempt(
     );
   }
 
+  attempt.duplication = await checkDuplication(cwd, config.minDuplicateLines);
+  if (attempt.duplication.clones.length > 0) {
+    return fail(
+      "slop",
+      `New code repeats code the repo already has. Reuse or extract the original instead:\n${formatClones(attempt.duplication.clones)}`,
+    );
+  }
+
   for (const gate of config.gates) {
     const result = await runGate(gate, cwd, config.gateTimeoutMs);
     attempt.gates.push(result);
@@ -158,7 +169,7 @@ function commitMessage(task: string): string {
 }
 
 /**
- * Writer, then hard gates, then an outside review. A failure loops back to the
+ * Writer, then built-in slop checks, then hard gates, then an outside review. A failure loops back to the
  * writer with the exact reason, up to `maxIterations`. Thresholds are never
  * relaxed to make a run pass: when attempts run out, a human decides.
  */
