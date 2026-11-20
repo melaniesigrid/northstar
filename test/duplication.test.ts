@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findClones } from "../src/duplication.js";
-import { parseAddedLines } from "../src/git.js";
+import { groupNumbersByFile, parseAddedText } from "../src/git.js";
 import { SLUGIFY_SOURCE as SLUGIFY, snapshotWithAdded } from "./helpers.js";
 
 const UNRELATED = [
@@ -161,7 +161,9 @@ describe("findClones", () => {
   });
 });
 
-describe("parseAddedLines", () => {
+const parseAddedLines = (diff: string) => groupNumbersByFile(parseAddedText(diff));
+
+describe("parseAddedText", () => {
   it("collects added line numbers per file and skips deleted files", () => {
     const diff = [
       "diff --git a/src/a.ts b/src/a.ts",

@@ -178,6 +178,23 @@ describe("runPipeline", () => {
     expect(writer.prompts[1]).toContain("value.ts:1 cast to any");
   });
 
+  it("blocks a change that credits an AI tool, even in documentation", async () => {
+    const credit = ["Generated", "with", "Claude"].join(" ");
+    const writer = fakeAgent("a", [
+      (spec) => {
+        writeFileSync(path.join(spec.cwd, "feature.txt"), "feature\n");
+        writeFileSync(path.join(spec.cwd, "NOTES.md"), `# Notes\n\n${credit}\n`);
+        return "done";
+      },
+      writeFileTurn("NOTES.md", "# Notes\n"),
+    ]);
+
+    const outcome = await runPipeline(pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW])));
+
+    expect(outcome.attempts.map((attempt) => attempt.failure?.stage)).toEqual(["slop", undefined]);
+    expect(writer.prompts[1]).toContain("NOTES.md:3");
+  });
+
   it("asks the reviewer to verify new symbols that nothing references", async () => {
     const writer = fakeAgent("a", [
       (spec) => {
@@ -191,6 +208,34 @@ describe("runPipeline", () => {
     await runPipeline(pipelineInput(writer, reviewer));
 
     expect(reviewer.prompts[0]).toContain("orphan.ts:1 orphanHelper");
+  });
+
+  it("points the writer to an existing helper the task could reuse", async () => {
+    const repoRoot = createTempRepo();
+    writeFileSync(path.join(repoRoot, "slug.ts"), `${SLUGIFY_SOURCE}\n`);
+    gitIn(repoRoot, "add", "-A");
+    gitIn(repoRoot, "commit", "-q", "-m", "add slugify");
+    const writer = fakeAgent("a", [writeFileTurn("feature.txt", "slugged\n")]);
+    const input = pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW]), {}, repoRoot);
+
+    const outcome = await runPipeline({ ...input, task: "Slugify the feature name in feature.txt" });
+
+    expect(writer.prompts[0]).toContain("- slugify (slug.ts:1)");
+    expect(outcome.suggestedHelpers).toEqual([{ name: "slugify", file: "slug.ts", line: 1, exported: true }]);
+  });
+
+  it("gives both agents the rules a person wrote into the committed profile", async () => {
+    const repoRoot = createTempRepo();
+    writeFileSync(path.join(repoRoot, "northstar.profile.json"), JSON.stringify({ notes: ["Store dates in UTC."] }));
+    gitIn(repoRoot, "add", "-A");
+    gitIn(repoRoot, "commit", "-q", "-m", "add profile");
+    const writer = fakeAgent("a", [writeFileTurn("feature.txt", "feature\n")]);
+    const reviewer = fakeAgent("b", [CLEAN_REVIEW]);
+
+    await runPipeline(pipelineInput(writer, reviewer, {}, repoRoot));
+
+    expect(writer.prompts[0]).toContain("- Store dates in UTC.");
+    expect(reviewer.prompts[0]).toContain("- Store dates in UTC.");
   });
 
   it("stops before any agent runs when setup fails", async () => {

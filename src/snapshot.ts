@@ -1,17 +1,15 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { listTrackedFiles, stagedAddedLines } from "./git.js";
+import { groupNumbersByFile, listTrackedFiles, stagedAddedText, type AddedLine } from "./git.js";
 
-/** The repo's source files with the change applied, plus which lines the change added. */
+/** The repo's source files with the change applied, plus what the change added. */
 export interface ChangeSnapshot {
+  /** Source files only. Prose, data, markup and stylesheets are left out. */
   files: Map<string, string>;
+  /** Added line numbers per file. */
   addedLines: Map<string, Set<number>>;
-}
-
-export interface AddedLine {
-  file: string;
-  number: number;
-  text: string;
+  /** Every added line in every file, documentation included. */
+  addedText: AddedLine[];
 }
 
 const MAX_FILE_BYTES = 512 * 1024;
@@ -21,7 +19,7 @@ const MAX_FILE_BYTES = 512 * 1024;
  * declarations, with no way to "reuse" them short of a build step. Replaying
  * a static site's history blocked 10 of 32 commits before these were skipped.
  */
-const SKIPPED_EXTENSIONS = new Set([
+export const SKIPPED_EXTENSIONS = new Set([
   ".md", ".mdx", ".txt", ".json", ".lock", ".yaml", ".yml", ".toml", ".csv", ".svg", ".snap",
   ".html", ".htm", ".xml", ".css", ".scss", ".less",
 ]);
@@ -40,18 +38,11 @@ export async function loadSnapshot(cwd: string): Promise<ChangeSnapshot> {
     const content = await readSource(path.join(cwd, file));
     if (content !== undefined) files.set(file, content);
   }
-  return { files, addedLines: await stagedAddedLines(cwd) };
+  const addedText = await stagedAddedText(cwd);
+  return { files, addedLines: groupNumbersByFile(addedText), addedText };
 }
 
-/** The added lines of every source file in the snapshot, in file order. */
+/** The added lines that belong to source files. */
 export function addedLinesOf(snapshot: ChangeSnapshot): AddedLine[] {
-  const added: AddedLine[] = [];
-  for (const [file, numbers] of snapshot.addedLines) {
-    const lines = snapshot.files.get(file)?.split("\n") ?? [];
-    for (const number of [...numbers].sort((a, b) => a - b)) {
-      const text = lines[number - 1];
-      if (text !== undefined) added.push({ file, number, text });
-    }
-  }
-  return added;
+  return snapshot.addedText.filter((line) => snapshot.files.has(line.file));
 }

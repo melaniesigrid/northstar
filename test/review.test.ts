@@ -33,7 +33,7 @@ describe("parseFindings", () => {
 
 describe("buildReviewPrompt", () => {
   it("truncates a very large diff and tells the reviewer where to read the rest", () => {
-    const prompt = buildReviewPrompt("task", "x".repeat(100_000));
+    const prompt = buildReviewPrompt({ task: "task", diff: "x".repeat(100_000) });
 
     expect(prompt.length).toBeLessThan(70_000);
     expect(prompt).toContain("diff truncated");

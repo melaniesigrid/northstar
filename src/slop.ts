@@ -1,3 +1,4 @@
+import { findAttributionMarkers, type AttributionMarker } from "./attribution.js";
 import { findClones, formatClones, type DuplicationResult } from "./duplication.js";
 import { loadSnapshot, type ChangeSnapshot } from "./snapshot.js";
 import { findSuppressions, type Suppression } from "./suppressions.js";
@@ -7,6 +8,8 @@ import { findUnreferencedSymbols, type UnreferencedSymbol } from "./unreferenced
 export interface SlopReport {
   duplication: DuplicationResult;
   suppressions: Suppression[];
+  /** Notes crediting an AI tool. Always blocked. */
+  attribution: AttributionMarker[];
   /** Signals for the reviewer to verify, never a reason to block on their own. */
   unreferenced: UnreferencedSymbol[];
 }
@@ -15,6 +18,7 @@ export function analyzeSlop(snapshot: ChangeSnapshot, config: Config): SlopRepor
   return {
     duplication: findClones(snapshot, config.minDuplicateLines),
     suppressions: findSuppressions(snapshot),
+    attribution: findAttributionMarkers(snapshot.addedText),
     unreferenced: findUnreferencedSymbols(snapshot),
   };
 }
@@ -55,6 +59,10 @@ export function describeBlockingSlop(report: SlopReport, config: Config): string
     problems.push(
       `The change silences ${report.suppressions.length} lint or type checks and the limit is ${config.maxNewSuppressions}. Fix the underlying problem instead:\n${list}`,
     );
+  }
+  if (report.attribution.length > 0) {
+    const list = report.attribution.map((marker) => `- ${marker.file}:${marker.line} ${marker.text}`).join("\n");
+    problems.push(`The change credits an AI tool for the work. Remove these notes:\n${list}`);
   }
   return problems.length > 0 ? problems.join("\n\n") : undefined;
 }

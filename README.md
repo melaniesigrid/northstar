@@ -11,11 +11,13 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Built | Not built yet |
 | --- | --- |
 | Isolated git worktree per run | Complexity check |
-| Claude Code and Codex adapters behind one interface | Repo convention profile and reuse search |
+| Claude Code and Codex adapters behind one interface | Convention rules proposed by an agent |
 | Setup commands and configurable hard gates | Slop score and benchmark |
 | Line budget check | Writer rebuttal round |
-| Duplication gate | Pull request creation |
+| Convention profile and reuse search | Pull request creation |
+| Duplication gate | |
 | Suppression gate | |
+| AI credit gate | |
 | Unreferenced symbol signal for the reviewer | |
 | Cross-vendor review with structured findings | |
 | Retry loop with exact feedback, capped attempts | |
@@ -27,24 +29,64 @@ The adapters are checked against each CLI's documented flags and output, and the
 
 1. NorthStar creates a branch `northstar/<run id>` in its own worktree. Your checkout is never touched.
 2. Setup commands run once, for example `npm ci`.
-3. The writer agent makes the change.
-4. The change is staged and checked against the line budget.
-5. The built-in slop checks run on the added code: duplication, new suppressions, and unreferenced symbols.
-6. Each configured gate runs in order. A gate is any command that exits 0 on success.
-7. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
-8. A failed check or a blocking finding goes back to the writer with the exact reason.
-9. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
+3. NorthStar reads the repo's conventions and finds existing helpers that relate to the task.
+4. The writer agent makes the change, with both in hand.
+5. The change is staged and checked against the line budget.
+6. The built-in slop checks run on what the change added.
+7. Each configured gate runs in order. A gate is any command that exits 0 on success.
+8. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
+9. A failed check or a blocking finding goes back to the writer with the exact reason.
+10. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
 
 A review that cannot be parsed is never treated as a pass.
 
+## Conventions and reuse
+
+Before the writer starts, NorthStar tells it how the repo is written and which existing code looks relevant. The reviewer gets the same conventions, so naming and reuse are judged against the repo and not against a model's habits.
+
+### Convention profile
+
+A scan of tracked files and package manifests finds:
+
+- The extensions most code is written in
+- The file naming style each extension follows, when most files agree on one
+- How tests are named and where they live
+- The folders that hold most of the code
+- The libraries already in use
+
+Run `northstar profile` to write the result to `northstar.profile.json`, then review it, edit it, and commit it. Add your own rules under `notes`. They reach both agents word for word and are kept when you rescan:
+
+```json
+{ "notes": ["Store dates in UTC.", "Server components by default. Add \"use client\" only for interactivity."] }
+```
+
+A committed profile is used as it stands. Without one, the repo is scanned at the start of each run.
+
+### Reuse search
+
+NorthStar indexes every top-level declaration outside test files and gives the writer up to 12 whose names share words with the task:
+
+```
+Existing helpers that look relevant. Reuse them instead of writing new ones:
+- formatDueDate (src/dates.ts:10)
+- mean (src/features/causal.ts:55, not exported yet)
+```
+
+A helper private to its file is listed too, marked as not exported, because exporting it beats copying it. The match is on keywords, so it finds `slugify` for "slugify the title" and misses `sd` for "standard deviation". The duplication gate is the backstop for what it misses.
+
+### No AI credits
+
+Work that goes through NorthStar reads as written by your team. The writer is told to leave no tool signatures, and the AI credit gate blocks any added line that credits an AI tool, in code, comments, or documentation. The commit NorthStar makes carries the task as its message and nothing else.
+
 ## Slop checks
 
-Three checks run on every change before any configured gate. They need no setup and no extra dependencies, and they only ever look at lines the change added. Code that was already in the repo is never held against a change.
+These checks run on every change before any configured gate. They need no setup and no extra dependencies, and they only ever look at lines the change added. Code that was already in the repo is never held against a change.
 
 | Check | Catches | Outcome |
 | --- | --- | --- |
 | Duplication | Copy-pasted code | Blocks the change |
 | Suppressions | New `as any`, `@ts-ignore`, `eslint-disable` and similar | Blocks past `maxNewSuppressions` |
+| AI credits | Lines crediting an AI tool, in code or docs | Blocks the change |
 | Repeated data | Copied lists of literals and field mappings | Passed to the reviewer to verify |
 | Unreferenced symbols | New top-level names nothing else uses | Passed to the reviewer to verify |
 
@@ -96,6 +138,7 @@ npm run build
 npm link              # makes the `northstar` command available
 
 northstar doctor      # shows which agent CLIs are installed
+northstar profile     # scans the repo's conventions into northstar.profile.json
 ```
 
 In the repo you want to work on, add `northstar.config.json`:
