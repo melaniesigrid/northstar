@@ -7,10 +7,18 @@ import { getAdapter, listAdapters } from "./adapters/index.js";
 import { auditCommits, renderAudit } from "./audit.js";
 import { loadTasks, renderBenchmark, runBenchmark } from "./bench.js";
 import { calibrateReviewer, renderCalibration } from "./calibrate.js";
-import { CONFIG_FILE, DEFAULT_SLOP_SETTINGS, loadConfig } from "./config.js";
+import { CONFIG_FILE, DEFAULT_AGENT, DEFAULT_SLOP_SETTINGS, loadConfig } from "./config.js";
 import { findRepoRoot } from "./git.js";
 import { runPipeline, type PipelineInput } from "./pipeline.js";
-import { checkAgents, renderChecks, type AgentRole } from "./preflight.js";
+import {
+  checkAgents,
+  describeInstall,
+  inspectInstall,
+  isUsable,
+  renderChecks,
+  rolesWithoutSignIn,
+  type AgentRole,
+} from "./preflight.js";
 import { loadProfile, PROFILE_FILE, renderConventions, scanRepo } from "./profile.js";
 import { renderReport } from "./report.js";
 import type { Config } from "./types.js";
@@ -37,9 +45,13 @@ calibrate
          reviewer agent. Costs one review per commit, 10 commits by default.
 profile  Scans the repo's conventions and writes them to ${PROFILE_FILE}
          for you to review, edit and commit. Your notes are kept on rescans.
-doctor   Shows which agent CLIs are installed. With --live it also asks each
-         agent for a one-word answer, which proves it is signed in and that its
-         model name is accepted. That costs one small model call per agent.`;
+doctor   Shows which agent CLIs are installed and which of them your setup
+         needs. With --live it also asks each needed agent for a one-word
+         answer, which proves it is signed in and that its model name is
+         accepted. That costs one small model call per agent.
+
+Every role is done by Codex unless ${CONFIG_FILE} names another agent, so one
+signed-in CLI is enough.`;
 
 function newRunId(): string {
   const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
@@ -70,28 +82,33 @@ async function loadConfigIfPresent(file: string): Promise<Config | undefined> {
   return exists ? loadConfig(file) : undefined;
 }
 
-/** Checks the configured agents when the repo has a config, and every installed agent when it has none. */
-async function doctorLive(options: { config?: string }): Promise<number> {
+/** The roles in play: the repo's config when it has one, and the default agent for everything when it has none. */
+async function rolesInUse(options: { config?: string }): Promise<{ roles: AgentRole[]; cwd: string }> {
   const repoRoot = await findRepoRoot(process.cwd()).catch(() => undefined);
   const configFile = options.config ?? (repoRoot === undefined ? undefined : path.join(repoRoot, CONFIG_FILE));
   const config = configFile === undefined ? undefined : await loadConfigIfPresent(configFile);
-  const roles = config
-    ? configuredRoles(config)
-    : listAdapters().map((adapter) => ({ role: "not configured", adapter }));
-
-  const checks = await checkAgents(roles, repoRoot ?? process.cwd());
-  console.log(`\n${renderChecks(checks)}`);
-  return checks.every((check) => check.ready) ? 0 : 1;
+  const roles = config ? configuredRoles(config) : [{ role: "every role by default", adapter: getAdapter(DEFAULT_AGENT) }];
+  return { roles, cwd: repoRoot ?? process.cwd() };
 }
 
 async function doctor(options: { live?: boolean; config?: string }): Promise<number> {
+  const { roles, cwd } = await rolesInUse(options);
+  const needed = new Set(roles.map((entry) => entry.adapter.id));
+  let allUsable = true;
   for (const adapter of listAdapters()) {
-    const { installed, version } = await adapter.detect();
-    console.log(`${adapter.id}: ${installed ? `installed (${version})` : "not found on PATH"}`);
+    const state = await inspectInstall(adapter);
+    const isNeeded = needed.has(adapter.id);
+    if (isNeeded && !isUsable(state)) allUsable = false;
+    console.log(describeInstall(adapter.id, state, isNeeded));
   }
-  if (options.live) return doctorLive(options);
-  console.log("\nInstalled is not the same as signed in. `northstar doctor --live` checks that with one small model call per agent.");
-  return 0;
+
+  if (!options.live) {
+    console.log("\nTo prove each agent answers, with the model your config names, run `northstar doctor --live`. It costs one small model call per agent.");
+    return allUsable ? 0 : 1;
+  }
+  const checks = await checkAgents(roles, cwd);
+  console.log(`\n${renderChecks(checks)}`);
+  return checks.every((check) => check.ready) ? 0 : 1;
 }
 
 /** Says which agent is not ready, so the caller can stop before spending anything on real work. */
@@ -100,6 +117,15 @@ async function agentsAreReady(roles: AgentRole[], cwd: string): Promise<boolean>
   const ready = checks.every((check) => check.ready);
   if (!ready) console.error(`Nothing was started because an agent is not ready.\n\n${renderChecks(checks)}`);
   return ready;
+}
+
+/**
+ * The check a single run can afford: free unless a CLI reports that nobody is
+ * signed in, and then one short model call to allow for a key in the environment.
+ */
+async function signInLooksFine(roles: AgentRole[], cwd: string): Promise<boolean> {
+  const suspects = await rolesWithoutSignIn(roles);
+  return suspects.length === 0 || agentsAreReady(suspects, cwd);
 }
 
 /** Keeps the report and the data behind it in one folder, and shows the report. */
@@ -175,6 +201,7 @@ async function profile(): Promise<number> {
 async function run(task: string, options: { config?: string; base: string }): Promise<number> {
   const repoRoot = await findRepoRoot(process.cwd());
   const config = await loadConfig(options.config ?? path.join(repoRoot, CONFIG_FILE));
+  if (!(await signInLooksFine(configuredRoles(config), repoRoot))) return 2;
   const outcome = await runPipeline({
     task,
     runId: newRunId(),

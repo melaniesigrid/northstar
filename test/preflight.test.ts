@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkAgents, renderChecks } from "../src/preflight.js";
+import { checkAgents, describeInstall, renderChecks, rolesWithoutSignIn } from "../src/preflight.js";
 import type { AgentAdapter } from "../src/types.js";
 import { fakeAgent } from "./helpers.js";
 
@@ -59,6 +59,58 @@ describe("checkAgents", () => {
     const checks = await checkAgents([{ role: "writer", adapter: missing }], process.cwd());
 
     expect(checks[0]).toMatchObject({ ready: false, detail: "Not found on PATH." });
+  });
+});
+
+describe("describeInstall", () => {
+  it.each([
+    [{ installed: true, version: "1.2.3" }, true, "codex: installed (1.2.3)"],
+    [{ installed: true, version: "1.2.3" }, false, "codex: installed (1.2.3), not used by your setup"],
+    [{ installed: true, version: "1.2.3", signInProblem: "Run `codex login`." }, true, "codex: installed (1.2.3), NOT SIGNED IN. Run `codex login`."],
+    [{ installed: false }, true, "codex: NOT FOUND on PATH, and your setup uses it"],
+    [{ installed: false }, false, "codex: not installed, and not needed by your setup"],
+  ])("treats a missing CLI as a problem only when the setup uses it", (detected, needed, line) => {
+    expect(describeInstall("codex", detected, needed)).toBe(line);
+  });
+});
+
+describe("checkAgents with a CLI that knows whether it is signed in", () => {
+  const signedOutCli = (turns: Parameters<typeof fakeAgent>[1]) => ({
+    ...fakeAgent("openai", turns),
+    signInProblem: async () => "No sign-in is stored. Run `codex login`.",
+  });
+
+  it("gives the fix instead of the CLI's network noise when nobody is signed in", async () => {
+    const waiting = () => ({ status: "timeout" as const, finalMessage: "Codex timed out.", raw: null });
+    const agent = signedOutCli([waiting]);
+
+    const checks = await checkAgents([{ role: "writer", adapter: agent }], process.cwd());
+
+    expect(checks[0]).toMatchObject({ ready: false, detail: "No sign-in is stored. Run `codex login`." });
+    expect(agent.specs[0]?.timeoutMs).toBeLessThan(60_000);
+  });
+
+  it("still counts the agent as ready when it answers anyway, as it does with a key in the environment", async () => {
+    const checks = await checkAgents([{ role: "writer", adapter: signedOutCli([READY]) }], process.cwd());
+
+    expect(checks[0]?.ready).toBe(true);
+  });
+});
+
+describe("rolesWithoutSignIn", () => {
+  it("names only the roles whose CLI reports that nobody is signed in, without calling a model", async () => {
+    const signedOut = { ...fakeAgent("openai", []), signInProblem: async () => "Run `codex login`." };
+    const signedIn = { ...fakeAgent("openai", []), signInProblem: async () => undefined };
+    const cannotTell = fakeAgent("anthropic", []);
+
+    const suspects = await rolesWithoutSignIn([
+      { role: "writer", adapter: signedOut },
+      { role: "reviewer", adapter: signedIn },
+      { role: "planner", adapter: cannotTell },
+    ]);
+
+    expect(suspects.map((entry) => entry.role)).toEqual(["writer"]);
+    expect(signedOut.prompts).toEqual([]);
   });
 });
 

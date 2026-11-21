@@ -2,6 +2,8 @@ import { readFile } from "node:fs/promises";
 import { EFFORTS, type Config, type Effort, type GateConfig, type SlopSettings } from "./types.js";
 
 export const CONFIG_FILE = "northstar.config.json";
+/** Fills every role a config leaves out, so one signed-in CLI is enough to run everything. */
+export const DEFAULT_AGENT = "codex";
 
 const DEFAULTS = {
   maxIterations: 3,
@@ -79,8 +81,8 @@ export function parseConfig(raw: unknown): Config {
   }
   const config = raw as RawConfig;
   return {
-    writer: requireString(config, "writer"),
-    reviewer: requireString(config, "reviewer"),
+    writer: optionalString(config, "writer") ?? DEFAULT_AGENT,
+    reviewer: optionalString(config, "reviewer") ?? DEFAULT_AGENT,
     planner: optionalString(config, "planner"),
     writerModel: optionalString(config, "writerModel"),
     reviewerModel: optionalString(config, "reviewerModel"),

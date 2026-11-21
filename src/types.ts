@@ -41,6 +41,11 @@ export interface AgentAdapter {
   id: string;
   vendor: string;
   detect(): Promise<{ installed: boolean; version?: string }>;
+  /**
+   * For CLIs that can tell without a model call: what to do when no sign-in is
+   * stored, or undefined when one is.
+   */
+  signInProblem?(): Promise<string | undefined>;
   run(spec: RunSpec): Promise<RunResult>;
 }
 
