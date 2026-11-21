@@ -11,6 +11,18 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-21: Seeded review cases built, not yet run live
+
+**Question.** With one model as writer and reviewer, the worry is that the reviewer lets its own kind of mistake through. Replaying accepted commits cannot show that. What can?
+
+**Method.** Wrote ten small changes with a known right answer, each as a Markdown file holding the task, the files before, and the files after. Seven hold one problem: two reuse, two tests, one each for performance, scope, and simplicity. Three are clean versions of the same tasks. `northstar calibrate --seeded` builds each as a real repo with the change staged, reviews it with the same call a run makes, and reports catches, blocks for another reason, misses, and wrong blocks.
+
+**Result.** A test builds every shipped case and runs the plain checks on it. All ten pass them, which matters: a seeded change that the duplication or suppression check would stop never reaches review in a run, so it could not test the reviewer. The reviewer is shown the task and the diff and never the note saying what is wrong, and the scratch folder's name gives nothing away. No real review has judged the cases yet.
+
+**Limits.** Ten cases written by one person are a smoke test. They are obvious on purpose, so a miss means something and a full score means little. Nothing is seeded for the naming and comments rules, because the brief treats those as advisory.
+
+**Next.** Run it with Codex as the reviewer. Then add cases from real review comments in real repos, which are harder and more honest than invented ones.
+
 ## 2026-11-20: Codex for every role, run against the real Codex binary
 
 **Question.** NorthStar must run on Codex alone. Does anything in it still need a second agent, and how does the real Codex CLI behave in each role when nobody is signed in?
