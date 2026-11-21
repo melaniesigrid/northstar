@@ -11,6 +11,16 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Reviewer calibration and repeat detection built, not yet run live
+
+**Question.** Two risks came out of a second round of reading (see `docs/RESEARCH.md`, decisions 10 and 11). Does our reviewer block sound work, as studies of models judging code say it might? And does a run waste attempts on a writer that keeps producing the same change?
+
+**Method.** Built `northstar calibrate`, which replays accepted commits through the reviewer with the same brief a run uses, and made a run stop when an attempt's staged diff equals the previous one. Both are tested with scripted agents on real git repos.
+
+**Result.** The machinery works: the reviewer gets each commit as the change it was, the user's checkout is untouched, oversized commits are skipped without a model call, and a repeated change ends the run on attempt two without a second review. Against the real Claude Code binary, signed out, `calibrate` refuses to start and says why. No real review has been judged yet.
+
+**Next.** Run `northstar calibrate` on NorthStar itself and on DueBook, with Claude Code as the reviewer. This needs no writer, so it can happen before Codex is set up. Read every block. The share of blocks a person disagrees with is the number that decides whether the review brief changes.
+
 ## 2026-11-20: First run against the real Claude Code binary, signed out
 
 **Question.** What happens when the pipeline meets a real agent CLI instead of a scripted one, in the worst ordinary case: the CLI is installed and nobody is signed in?

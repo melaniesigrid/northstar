@@ -1,4 +1,11 @@
-import { FINDING_RULES, type Finding, type FindingRule } from "./types.js";
+import {
+  FINDING_RULES,
+  type AgentAdapter,
+  type Config,
+  type Finding,
+  type FindingRule,
+  type RunResult,
+} from "./types.js";
 
 const MAX_DIFF_CHARS = 60_000;
 
@@ -131,4 +138,22 @@ export function formatFindings(findings: Finding[]): string {
       return `- [${finding.rule}] ${finding.file}:${finding.line} ${finding.explanation}${fix}`;
     })
     .join("\n");
+}
+
+/** Asks the reviewer for findings on a change: read-only, with the config's model and limits. */
+export function requestReview(
+  reviewer: AgentAdapter,
+  config: Config,
+  cwd: string,
+  request: ReviewRequest,
+): Promise<RunResult> {
+  return reviewer.run({
+    prompt: buildReviewPrompt(request),
+    cwd,
+    model: config.reviewerModel,
+    effort: config.reviewerEffort,
+    readOnly: true,
+    outputSchema: FINDINGS_SCHEMA,
+    timeoutMs: config.agentTimeoutMs,
+  });
 }

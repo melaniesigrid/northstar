@@ -23,6 +23,13 @@ export function createTempRepo(): string {
   return dir;
 }
 
+/** Writes one file and commits it, with `message` as the whole commit message. */
+export function commitFile(repo: string, file: string, content: string, message: string): void {
+  writeFileSync(path.join(repo, file), content);
+  gitIn(repo, "add", "-A");
+  gitIn(repo, "commit", "-q", "-m", message);
+}
+
 export function newRunId(): string {
   return `test-${randomBytes(4).toString("hex")}`;
 }

@@ -77,6 +77,11 @@ export async function listCommits(cwd: string, max: number): Promise<CommitInfo[
  * the commit's content staged on top of its parent. The slop checks can then
  * read a past commit exactly as they read a fresh change.
  */
+/** The whole message of a commit: subject and body. */
+export async function commitMessage(cwd: string, commit: string): Promise<string> {
+  return (await git(cwd, ["show", "--no-patch", "--format=%B", commit])).trim();
+}
+
 export async function restageCommit(cwd: string, commit: string): Promise<void> {
   await git(cwd, ["checkout", "--quiet", "--detach", "--force", commit]);
   await git(cwd, ["reset", "--quiet", "--soft", `${commit}^`]);

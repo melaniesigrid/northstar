@@ -22,6 +22,7 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | `northstar bench` for comparing the writer alone with the pipeline | |
 | Weak test signal for the reviewer | |
 | `northstar doctor --live` sign-in check | |
+| `northstar calibrate` for measuring the reviewer on commits you accepted | |
 | Duplication gate | |
 | Suppression gate | |
 | AI credit gate | |
@@ -44,7 +45,7 @@ The adapters are checked against each CLI's documented flags, and the Codex adap
 8. Each configured gate runs in order. A gate is any command that exits 0 on success.
 9. The reviewer agent reads the staged diff and returns findings as JSON. Anything it writes is discarded.
 10. A failed check or a blocking finding goes back to the writer with the exact reason.
-11. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. Thresholds are never relaxed to make a run pass.
+11. On success the change is committed on the branch. After `maxIterations` failures the run stops and a human decides. It also stops as soon as the writer answers feedback with exactly the change it made before, because another attempt would end the same way. Thresholds are never relaxed to make a run pass.
 
 A review that cannot be parsed is never treated as a pass.
 
@@ -90,6 +91,29 @@ Clean means every gate passed and no hard slop check failed. Both arms are held 
 The numbers above only show the layout. No live benchmark has been run yet. Below the summary comes one row per task and arm, with lines changed, duplicated lines, suppressions, attempts, tokens, cost, and time, so the price of the extra quality is always next to it.
 
 Five seed tasks against NorthStar's own code are included. See `benchmark/tasks/README.md` for the task format and what makes a good task.
+
+## Measure your reviewer: calibrate
+
+An AI reviewer can be too strict. Studies of models judging code find that they often reject correct code, and that asking for an explanation and a fix along with the verdict makes this worse (see `docs/RESEARCH.md`, decision 10). In NorthStar every wrong block costs an attempt, and three of them end a run with "needs a human".
+
+`northstar calibrate` measures this on your own repo. It shows the reviewer your recent commits, one at a time, exactly as a run would: the commit message as the task, the diff, your conventions, and the slop signals. Then it reports how many of those commits the reviewer would have blocked.
+
+```bash
+northstar calibrate              # the last 10 commits
+northstar calibrate --commits 25
+```
+
+```text
+# NorthStar reviewer calibration on 10 commits
+
+The reviewer would have blocked 2 of the 9 commits it judged.
+
+Blocking findings by rule: tests 2, reuse 1.
+```
+
+The numbers above only show the layout. Below the summary comes one row per commit and every finding behind each block. A person accepted all of these commits, so read the blocks and decide which were deserved. A block you agree with is the reviewer doing its job on code that slipped through. A block you disagree with is the reviewer being too strict for this repo.
+
+It needs only the reviewer agent, so you can run it before your writer is set up. It costs one review per commit, skips commits over the line budget, and never touches your checkout. The report is saved under `.northstar/calibrate/<id>/`.
 
 ## Using NorthStar with Codex
 
