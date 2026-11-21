@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 320" width="880" height="320" role="img" aria-labelledby="title desc">
+  <title id="title">NorthStar</title>
+  <desc id="desc">Your coding agent is fast. NorthStar makes it careful. A night sky with the Little Dipper pointing to the pole star.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070b1a"/>
+      <stop offset="0.55" stop-color="#0d1533"/>
+      <stop offset="1" stop-color="#1a1f4a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffe9a8" stop-opacity="0.75"/>
+      <stop offset="0.35" stop-color="#ffd479" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffd479" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="haze" cx="0.9" cy="0.2" r="0.8">
+      <stop offset="0" stop-color="#3b4cc0" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#3b4cc0" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="card"><rect width="880" height="320" rx="20"/></clipPath>
+    <style>
+      .t0 { animation: twinkle 3.2s ease-in-out infinite; }
+      .t1 { animation: twinkle 4.4s ease-in-out 0.8s infinite; }
+      .t2 { animation: twinkle 5.6s ease-in-out 1.6s infinite; }
+      .pole { animation: breathe 4s ease-in-out infinite; transform-origin: 786px 84px; }
+      @keyframes twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.95; } }
+      @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+      @media (prefers-reduced-motion: reduce) { .t0, .t1, .t2, .pole { animation: none; } }
+    </style>
+  </defs>
+  <g clip-path="url(#card)">
+    <rect width="880" height="320" fill="url(#sky)"/>
+    <rect width="880" height="320" fill="url(#haze)"/>
+    <circle cx="289" cy="55" r="0.6" fill="#dbe7ff" opacity="0.29" class="t0"/><circle cx="196" cy="36" r="1.0" fill="#dbe7ff" opacity="0.29"/><circle cx="352" cy="303" r="0.6" fill="#dbe7ff" opacity="0.56"/><circle cx="501" cy="66" r="0.6" fill="#dbe7ff" opacity="0.55" class="t2"/><circle cx="66" cy="28" r="0.7" fill="#dbe7ff" opacity="0.52"/><circle cx="431" cy="22" r="0.6" fill="#dbe7ff" opacity="0.67"/><circle cx="612" cy="204" r="1.0" fill="#dbe7ff" opacity="0.41"/><circle cx="670" cy="49" r="0.7" fill="#dbe7ff" opacity="0.47"/><circle cx="797" cy="159" r="0.7" fill="#dbe7ff" opacity="0.5"/><circle cx="758" cy="296" r="1.2" fill="#dbe7ff" opacity="0.47"/><circle cx="354" cy="41" r="1.0" fill="#dbe7ff" opacity="0.28" class="t2"/><circle cx="526" cy="41" r="1.2" fill="#dbe7ff" opacity="0.33"/><circle cx="862" cy="150" r="1.0" fill="#dbe7ff" opacity="0.42"/><circle cx="604" cy="165" r="0.7" fill="#dbe7ff" opacity="0.77" class="t1"/><circle cx="464" cy="54" r="1.2" fill="#dbe7ff" opacity="0.75"/><circle cx="661" cy="99" r="0.6" fill="#dbe7ff" opacity="0.63"/><circle cx="712" cy="232" r="0.7" fill="#dbe7ff" opacity="0.36"/><circle cx="416" cy="68" r="1.2" fill="#dbe7ff" opacity="0.78" class="t0"/><circle cx="395" cy="291" r="0.8" fill="#dbe7ff" opacity="0.78"/><circle cx="822" cy="227" r="1.0" fill="#dbe7ff" opacity="0.47"/><circle cx="822" cy="227" r="0.7" fill="#dbe7ff" opacity="0.8" class="t2"/><circle cx="696" cy="228" r="0.6" fill="#dbe7ff" opacity="0.54" class="t0"/><circle cx="811" cy="140" r="0.7" fill="#dbe7ff" opacity="0.7"/><circle cx="666" cy="108" r="1.2" fill="#dbe7ff" opacity="0.48"/><circle cx="579" cy="255" r="1.2" fill="#dbe7ff" opacity="0.48"/><circle cx="798" cy="160" r="1.2" fill="#dbe7ff" opacity="0.33"/><circle cx="676" cy="55" r="0.7" fill="#dbe7ff" opacity="0.51" class="t2"/><circle cx="633" cy="177" r="0.8" fill="#dbe7ff" opacity="0.63"/><circle cx="61" cy="67" r="0.6" fill="#dbe7ff" opacity="0.67"/><circle cx="536" cy="162" r="1.2" fill="#dbe7ff" opacity="0.36"/><circle cx="776" cy="71" r="1.0" fill="#dbe7ff" opacity="0.33" class="t1"/><circle cx="780" cy="56" r="0.8" fill="#dbe7ff" opacity="0.33"/><circle cx="768" cy="300" r="0.7" fill="#dbe7ff" opacity="0.66" class="t2"/><circle cx="725" cy="58" r="1.0" fill="#dbe7ff" opacity="0.8"/><circle cx="630" cy="16" r="1.2" fill="#dbe7ff" opacity="0.5" class="t0"/><circle cx="614" cy="125" r="1.2" fill="#dbe7ff" opacity="0.59"/><circle cx="450" cy="29" r="0.7" fill="#dbe7ff" opacity="0.78"/><circle cx="591" cy="294" r="1.0" fill="#dbe7ff" opacity="0.33"/>
+    <polyline points="560,236 604,262 654,250 640,206 560,236" fill="none" stroke="#8fb0ff" stroke-opacity="0.45" stroke-width="1.2"/>
+    <polyline points="640,206 688,172 734,132 786,84" fill="none" stroke="#8fb0ff" stroke-opacity="0.45" stroke-width="1.2"/>
+    <circle cx="560" cy="236" r="2.6" fill="#cfe1ff"/><circle cx="604" cy="262" r="2.6" fill="#cfe1ff"/><circle cx="654" cy="250" r="2.6" fill="#cfe1ff"/><circle cx="640" cy="206" r="2.6" fill="#cfe1ff"/><circle cx="688" cy="172" r="2.6" fill="#cfe1ff"/><circle cx="734" cy="132" r="2.6" fill="#cfe1ff"/>
+    <circle cx="786" cy="84" r="78" fill="url(#glow)"/>
+    <g class="pole">
+      <path d="M786,50 Q791,79 820,84 Q791,89 786,118 Q781,89 752,84 Q781,79 786,50 Z" fill="#ffe9a8"/>
+      <path d="M786,69 Q790,80 801,84 Q790,88 786,99 Q782,88 771,84 Q782,80 786,69 Z" fill="#fff8e1" transform="rotate(45 786 84)"/>
+      <circle cx="786" cy="84" r="4.2" fill="#ffffff"/>
+    </g>
+    <text x="48" y="128" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="800" letter-spacing="-1.5" fill="#ffffff">North<tspan fill="#ffd479">Star</tspan></text>
+    <text x="50" y="170" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="20" font-weight="500" fill="#c7d4f7">Your coding agent is fast.</text>
+    <text x="50" y="198" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="20" font-weight="700" fill="#ffffff">NorthStar makes it careful.</text>
+    <g font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="600" fill="#dbe7ff">
+      <rect x="48" y="244" width="170" height="30" rx="15" fill="#ffffff" fill-opacity="0.07" stroke="#8fb0ff" stroke-opacity="0.4"/>
+      <text x="133" y="263.5" text-anchor="middle">Runs on Codex alone</text>
+      <rect x="228" y="244" width="208" height="30" rx="15" fill="#ffffff" fill-opacity="0.07" stroke="#8fb0ff" stroke-opacity="0.4"/>
+      <text x="332" y="263.5" text-anchor="middle">Zero runtime dependencies</text>
+      <rect x="446" y="244" width="100" height="30" rx="15" fill="#ffffff" fill-opacity="0.07" stroke="#8fb0ff" stroke-opacity="0.4"/>
+      <text x="496" y="263.5" text-anchor="middle">Node 20+</text>
+    </g>
+  </g>
+</svg>

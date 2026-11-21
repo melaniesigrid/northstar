@@ -2,7 +2,7 @@
   "name": "northstar",
   "version": "0.1.0",
   "private": true,
-  "description": "Agent-agnostic quality pipeline for coding agents. Any agent writes, gates and a second vendor verify.",
+  "description": "A quality pipeline for coding agents. Plan, write, check, review, and only then commit. Runs on Codex alone.",
   "type": "module",
   "bin": {
     "northstar": "dist/cli.js"
