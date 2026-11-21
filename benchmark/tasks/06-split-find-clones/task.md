@@ -1,0 +1,1 @@
+`findClones` in `src/duplication.ts` is hard to follow: it nests several loops and conditions in one function. Split it into smaller named steps so each one can be read on its own. Behavior must not change, the existing tests must pass without being edited, and the exported names and their signatures must stay as they are.

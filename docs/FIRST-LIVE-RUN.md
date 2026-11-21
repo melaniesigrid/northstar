@@ -43,7 +43,7 @@ What to look at:
 northstar bench
 ```
 
-Five tasks, each run twice: Codex alone, then Codex inside the pipeline. This is the long step. A task through the pipeline can take a planner call, up to three writer attempts, and up to three reviews, so allow an hour or more and watch the first task before walking away.
+Seven tasks, each run twice: Codex alone, then Codex inside the pipeline. This is the long step. A task through the pipeline can take a planner call, up to three writer attempts, and up to three reviews, so allow well over an hour and watch the first task before walking away.
 
 What to look at:
 
@@ -66,6 +66,6 @@ What to look at:
 | The pipeline is not cleaner than Codex alone on these tasks | The tasks are too easy or the checks are not catching what Codex gets wrong. Read the raw diffs before building more. |
 | The pipeline is cleaner but costs many times more | Look at which role spends it. The planner is the first thing to switch off and compare. |
 | Runs often end on attempt three or on a repeated change | Lower `maxIterations` to 2 and improve the feedback text instead. |
-| The weak test and unreferenced symbol signals never fire on Codex output | They stay advisory or go. |
+| The weak test, unreferenced symbol, and complexity signals never fire on Codex output | They stay advisory or go. |
 
-Five tasks on one repo cannot prove anything general. They can show whether the machine works and where to look next.
+Seven tasks on one repo cannot prove anything general. They can show whether the machine works and where to look next.

@@ -39,6 +39,27 @@ function isDataOnly(text: string): boolean {
   return !/[A-Za-z_$]/.test(rest) || PLAIN_REFERENCE.test(rest);
 }
 
+interface RawLine {
+  number: number;
+  raw: string;
+  /** How many template delimiters the line holds, counted with strings and regex literals set aside. */
+  backticks: number;
+  /** The line started inside a multi-line template literal. */
+  startsInTemplate: boolean;
+}
+
+/** Walks a file's lines while keeping track of multi-line template literals. */
+function* rawLines(content: string): Generator<RawLine> {
+  let insideTemplate = false;
+  let number = 0;
+  for (const raw of content.split("\n")) {
+    number += 1;
+    const backticks = countTemplateDelimiters(raw, insideTemplate);
+    yield { number, raw, backticks, startsInTemplate: insideTemplate };
+    if (backticks % 2 === 1) insideTemplate = !insideTemplate;
+  }
+}
+
 /**
  * The lines of a file worth comparing, trimmed. Left out: blank and
  * bracket-only lines, comments, imports including multi-line name lists, and
@@ -47,26 +68,65 @@ function isDataOnly(text: string): boolean {
  */
 export function meaningfulLines(content: string): SourceLine[] {
   const lines: SourceLine[] = [];
-  let insideTemplate = false;
   let insideImportBlock = false;
-  content.split("\n").forEach((raw, index) => {
+  for (const { number, raw, backticks, startsInTemplate } of rawLines(content)) {
     const text = raw.trim();
-    const backticks = countTemplateDelimiters(raw, insideTemplate);
-    const isTemplateBody = insideTemplate && backticks === 0;
-    if (backticks % 2 === 1) insideTemplate = !insideTemplate;
-
     if (insideImportBlock) {
       if (BLOCK_CLOSE.test(text)) insideImportBlock = false;
-      return;
+      continue;
     }
-    if (isTemplateBody) return;
+    if (startsInTemplate && backticks === 0) continue;
     if (IMPORT_BLOCK_OPEN.test(text)) {
       insideImportBlock = true;
-      return;
+      continue;
     }
     if (HAS_SUBSTANCE.test(text) && !COMMENT.test(text) && !IMPORT.test(text)) {
-      lines.push({ number: index + 1, text, isData: isDataOnly(text) });
+      lines.push({ number, text, isData: isDataOnly(text) });
     }
-  });
+  }
+  return lines;
+}
+
+/** Numbers of the lines that begin inside a multi-line template literal. Their indentation says nothing about the code. */
+export function templateTextLines(content: string): Set<number> {
+  const numbers = new Set<number>();
+  for (const line of rawLines(content)) {
+    if (line.startsInTemplate) numbers.add(line.number);
+  }
+  return numbers;
+}
+
+const LINE_COMMENT = /\/\/.*$/;
+const BLOCK_COMMENT = /\/\*.*?\*\//g;
+
+/** Cuts the part of a line that belongs to a multi-line template literal. */
+function outsideTemplate({ raw, backticks, startsInTemplate }: RawLine): string {
+  if (startsInTemplate) return backticks % 2 === 1 ? raw.slice(raw.indexOf("`") + 1) : "";
+  return backticks % 2 === 1 ? raw.slice(0, raw.lastIndexOf("`")) : raw;
+}
+
+/**
+ * Every line of a file with only its code left: string contents, regex
+ * literals, comments and template text are blanked, so that brackets and
+ * keywords found in the result are real ones. Line numbers are kept.
+ */
+export function codeOnlyLines(content: string): { number: number; code: string }[] {
+  let insideBlockComment = false;
+  const lines: { number: number; code: string }[] = [];
+  for (const line of rawLines(content)) {
+    let code = outsideTemplate(line).replace(STRING_LITERAL, '""').replace(REGEX_LITERAL, "$1");
+    if (insideBlockComment) {
+      const end = code.indexOf("*/");
+      insideBlockComment = end === -1;
+      code = end === -1 ? "" : code.slice(end + 2);
+    }
+    code = code.replace(BLOCK_COMMENT, "").replace(LINE_COMMENT, "");
+    const open = code.indexOf("/*");
+    if (open !== -1) {
+      insideBlockComment = true;
+      code = code.slice(0, open);
+    }
+    lines.push({ number: line.number, code });
+  }
   return lines;
 }

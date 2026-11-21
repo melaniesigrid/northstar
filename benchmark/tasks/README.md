@@ -41,4 +41,4 @@ An agent can read anything in the commit it starts from. Pin tasks to a commit m
 
 ## The seed tasks
 
-The five tasks here run against NorthStar's own code at a fixed commit. They are a starting set for checking that the runner works and for a first look at the numbers. Five tasks on one repo are not evidence of anything general. The real benchmark needs 20 to 30 tasks across several repos, with a human solution for each.
+The seven tasks here run against NorthStar's own code at a fixed commit. Five add something next to code that should be reused. Two are refactors of functions the complexity signal points at, where nothing may be added and behavior must hold. They are a starting set for checking that the runner works and for a first look at the numbers. Seven tasks on one repo are not evidence of anything general. The real benchmark needs 20 to 30 tasks across several repos, with a human solution for each.

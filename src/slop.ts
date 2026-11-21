@@ -1,4 +1,5 @@
 import { findAttributionMarkers, type AttributionMarker } from "./attribution.js";
+import { COMPLEXITY_LIMIT, findComplexFunctions, type ComplexFunction } from "./complexity.js";
 import { findClones, formatClones, type DuplicationResult } from "./duplication.js";
 import { findWeakTests, type WeakTest } from "./weak-tests.js";
 import { loadSnapshot, type ChangeSnapshot } from "./snapshot.js";
@@ -15,6 +16,8 @@ export interface SlopReport {
   unreferenced: UnreferencedSymbol[];
   /** New tests that would pass almost whatever the code does. Also for the reviewer. */
   weakTests: WeakTest[];
+  /** Functions the change left over the complexity limit, by estimate. Also for the reviewer. */
+  complexity: ComplexFunction[];
 }
 
 export function analyzeSlop(snapshot: ChangeSnapshot, settings: SlopSettings): SlopReport {
@@ -24,6 +27,7 @@ export function analyzeSlop(snapshot: ChangeSnapshot, settings: SlopSettings): S
     attribution: findAttributionMarkers(snapshot.addedText),
     unreferenced: findUnreferencedSymbols(snapshot),
     weakTests: findWeakTests(snapshot),
+    complexity: findComplexFunctions(snapshot),
   };
 }
 
@@ -51,12 +55,25 @@ export function reviewerHints(report: SlopReport): string[] {
       `An automated check found new tests that may not test anything. Verify each one. If the test would pass whether or not the code works, report it as a blocking "tests" finding:\n${list}`,
     );
   }
+  if (report.complexity.length > 0) {
+    const list = report.complexity
+      .map((fn) => `- ${fn.file}:${fn.line} ${fn.name} scores about ${fn.score}, ${fn.addedScore} of it added by this change`)
+      .join("\n");
+    hints.push(
+      `An automated check estimated the cognitive complexity of functions this change touched. The usual limit is ${COMPLEXITY_LIMIT}. Read each one. If the change added branching that makes the function hard to follow, and splitting it into named steps would clearly help, report it as a blocking "simplicity" finding:\n${list}`,
+    );
+  }
   return hints;
 }
 
 /** How many signals a report sends to the reviewer. */
 export function countReviewerSignals(report: SlopReport): number {
-  return report.unreferenced.length + report.duplication.dataClones.length + report.weakTests.length;
+  return (
+    report.unreferenced.length +
+    report.duplication.dataClones.length +
+    report.weakTests.length +
+    report.complexity.length
+  );
 }
 
 /** The writer's feedback when a hard slop check fails, or undefined when the change is clean. */

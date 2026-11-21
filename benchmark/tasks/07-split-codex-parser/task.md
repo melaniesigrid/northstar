@@ -1,0 +1,1 @@
+`parseCodexEvents` in `src/adapters/codex.ts` reads the event stream and also decides whether the run failed, all in one function. Separate reading the events from deciding the result, so each part can be read and tested on its own. Behavior must not change and the existing tests must pass without being edited. Add tests only if a new function deserves its own.

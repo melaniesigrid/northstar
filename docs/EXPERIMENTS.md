@@ -11,6 +11,23 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Complexity estimate replayed on six repos
+
+**Question.** Can cognitive complexity be estimated well enough without a parser to be worth showing the reviewer, and how often would it fire?
+
+**Method.** Wrote an estimate that reads braces and keywords from lines with strings, comments, and template text blanked. Checked it against hand scores, then replayed it over 74 commits in typecase, quant-harness, shipshape-platform, DueBook, ZipQuarry, and NorthStar itself, and read every function it pointed at.
+
+**Result.** On functions scored by hand the estimate matched exactly, including `parseCodexEvents` in this repo at 18. First version: a signal on 15 of 74 commits. Two problems showed up in the reading.
+
+- A file wrapped in one outer function scored 210, because every inner function was added to the wrapper. Named inner functions are now scored on their own, which is also right for handlers declared inside React components. Anonymous callbacks still count toward the function around them.
+- Five signals were for changes that added 2 or 3 points to a function that was already over the limit. The signal now needs the change to be the reason: it took the function over 15 or added at least 5 points.
+
+After both fixes: 10 of 74 commits. Every function listed is dense by any reading (the largest are a 150-line list view at 32 and a board component at 31). Whether each should be split is a judgment call, so this stays a signal for the reviewer.
+
+Two side findings from running the checks on this repo's own files. The first version of the scoring function scored 34 by its own measure and was split into five small steps. And the weak test signal wrongly flagged six new tests: their fixtures were template literals written at the left margin, which the indentation-based reading took for the end of the test. Template text is now skipped. Replaying the weak test signal on the five other repos again still flags nothing.
+
+**Next.** NorthStar has two functions over the limit that predate this check: `findClones` at 22 and `parseCodexEvents` at 18. They are good small benchmark tasks: "split this without changing behavior".
+
 ## 2026-11-20: Reviewer calibration and repeat detection built, not yet run live
 
 **Question.** Two risks came out of a second round of reading (see `docs/RESEARCH.md`, decisions 10 and 11). Does our reviewer block sound work, as studies of models judging code say it might? And does a run waste attempts on a writer that keeps producing the same change?

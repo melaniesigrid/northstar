@@ -65,6 +65,20 @@ describe("findWeakTests", () => {
     expect(names).toEqual(["first"]);
   });
 
+  it("reads past a fixture written at the left margin inside a template literal", () => {
+    const names = weakTestNames(
+      "src/parse.test.ts",
+      'it("parses a block", () => {',
+      "  const source = `function f() {",
+      "  return 1;",
+      "}`;",
+      "  expect(parse(source)).toEqual([1]);",
+      "});",
+    );
+
+    expect(names).toEqual([]);
+  });
+
   it("skips tests that are marked as not run", () => {
     expect(weakTestNames("src/cart.test.ts", 'it.todo("handles refunds");', 'it.skip("old flow", () => {', "  run();", "});")).toEqual([]);
   });

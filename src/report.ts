@@ -12,7 +12,7 @@ function describeUsage(label: string, usage: Usage | undefined): string | undefi
 
 function describeSlop(slop: SlopReport): string {
   const blocking = `${slop.duplication.duplicatedLines} duplicated lines, ${slop.suppressions.length} new suppressions, ${slop.attribution.length} AI credit notes`;
-  const forReviewer = `${slop.unreferenced.length} unreferenced symbols, ${slop.duplication.dataClones.length} repeated data blocks, ${slop.weakTests.length} weak tests`;
+  const forReviewer = `${slop.unreferenced.length} unreferenced symbols, ${slop.duplication.dataClones.length} repeated data blocks, ${slop.weakTests.length} weak tests, ${slop.complexity.length} complex functions`;
   return `- Slop checks: ${blocking}. Sent to the reviewer: ${forReviewer}`;
 }
 

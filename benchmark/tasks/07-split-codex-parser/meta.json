@@ -1,0 +1,4 @@
+{
+  "baseCommit": "ec43c705ef1776a9560099a94c94fc48a2b27881",
+  "notes": "A refactor a raw agent should handle well. parseCodexEvents scores about 18 at this commit. Watch for the rule about error events being lost: an error event alone must not fail a run that later completes a turn."
+}
