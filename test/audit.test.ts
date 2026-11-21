@@ -1,15 +1,7 @@
-import { writeFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { auditCommits, renderAudit } from "../src/audit.js";
 import { DEFAULT_SLOP_SETTINGS } from "../src/config.js";
-import { createTempRepo, gitIn, newRunId, SLUGIFY_SOURCE } from "./helpers.js";
-
-function commitFile(repo: string, file: string, content: string, subject: string): void {
-  writeFileSync(path.join(repo, file), content);
-  gitIn(repo, "add", "-A");
-  gitIn(repo, "commit", "-q", "-m", subject);
-}
+import { commitFile, createTempRepo, gitIn, newRunId, SLUGIFY_SOURCE } from "./helpers.js";
 
 /** A repo whose history holds one clean commit, one copy-paste and one silenced type error. */
 function repoWithHistory(): string {

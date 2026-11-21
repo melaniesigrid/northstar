@@ -14,7 +14,7 @@ import {
 } from "./git.js";
 import type { Helper } from "./helper-index.js";
 import { buildPlanPrompt } from "./plan.js";
-import { buildReviewPrompt, FINDINGS_SCHEMA, formatFindings, parseFindings } from "./review.js";
+import { formatFindings, parseFindings, requestReview } from "./review.js";
 import { checkSlop, describeBlockingSlop, reviewerHints, type SlopReport } from "./slop.js";
 import type { AgentAdapter, Config, Finding, Usage } from "./types.js";
 import { buildWriterPrompt } from "./writer-prompt.js";
@@ -81,12 +81,21 @@ export async function runSetup(config: Config, cwd: string): Promise<string | un
   return undefined;
 }
 
+/** What the last attempt left behind: why it failed and the change it had made. */
+interface PreviousAttempt {
+  feedback?: string;
+  diff?: string;
+}
+
+const STUCK_WRITER =
+  "The writer answered the feedback with exactly the change it made before, so another attempt would end the same way.";
+
 async function runAttempt(
   input: PipelineInput,
   cwd: string,
   briefing: { context: RepoContext; plan?: string },
   number: number,
-  feedback: string | undefined,
+  previous: PreviousAttempt,
 ): Promise<Attempt> {
   const { config } = input;
   const attempt: Attempt = { number, filesChanged: [], linesChanged: 0, gates: [], findings: [] };
@@ -96,7 +105,7 @@ async function runAttempt(
   };
 
   const written = await input.writer.run({
-    prompt: buildWriterPrompt({ task: input.task, config, feedback, ...briefing }),
+    prompt: buildWriterPrompt({ task: input.task, config, feedback: previous.feedback, ...briefing }),
     cwd,
     model: config.writerModel,
     effort: config.writerEffort,
@@ -114,6 +123,9 @@ async function runAttempt(
   const stat = await stagedStat(cwd);
   attempt.filesChanged = stat.files;
   attempt.linesChanged = stat.linesChanged;
+  if (previous.diff !== undefined && (await stagedDiff(cwd)) === previous.diff) {
+    return fail("writer", STUCK_WRITER, false);
+  }
   if (stat.files.length === 0) {
     return fail("scope", "No files were changed. Make the change the task asks for.");
   }
@@ -140,20 +152,12 @@ async function runAttempt(
     return fail("gate", `The "${failedGate.name}" gate failed:\n${failedGate.output}`);
   }
 
-  const reviewed = await input.reviewer.run({
-    prompt: buildReviewPrompt({
-      task: input.task,
-      diff: await stagedDiff(cwd),
-      plan: briefing.plan,
-      conventions: briefing.context.conventions,
-      hints: reviewerHints(attempt.slop),
-    }),
-    cwd,
-    model: config.reviewerModel,
-    effort: config.reviewerEffort,
-    readOnly: true,
-    outputSchema: FINDINGS_SCHEMA,
-    timeoutMs: config.agentTimeoutMs,
+  const reviewed = await requestReview(input.reviewer, config, cwd, {
+    task: input.task,
+    diff: await stagedDiff(cwd),
+    plan: briefing.plan,
+    conventions: briefing.context.conventions,
+    hints: reviewerHints(attempt.slop),
   });
   attempt.reviewerUsage = reviewed.usage;
   // Enforces read-only review even for agents that cannot be sandboxed.
@@ -224,9 +228,9 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
   await makePlan(input, worktree.path, context, outcome);
   const briefing = { context, plan: outcome.plan };
 
-  let feedback: string | undefined;
+  let previous: PreviousAttempt = {};
   for (let number = 1; number <= config.maxIterations; number++) {
-    const attempt = await runAttempt(input, worktree.path, briefing, number, feedback);
+    const attempt = await runAttempt(input, worktree.path, briefing, number, previous);
     outcome.attempts.push(attempt);
     if (!attempt.failure) {
       await commitStaged(worktree.path, commitMessage(task));
@@ -234,7 +238,7 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
       return { ...outcome, status: "passed", worktreePath: undefined };
     }
     if (!attempt.failure.retryable) break;
-    feedback = attempt.failure.detail;
+    previous = { feedback: attempt.failure.detail, diff: await stagedDiff(worktree.path) };
   }
   // A run that wrote nothing has nothing to inspect, so it should not leave a worktree and a branch behind.
   if (await isUnchanged(worktree.path)) {

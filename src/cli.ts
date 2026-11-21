@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { getAdapter, listAdapters } from "./adapters/index.js";
 import { auditCommits, renderAudit } from "./audit.js";
 import { loadTasks, renderBenchmark, runBenchmark } from "./bench.js";
+import { calibrateReviewer, renderCalibration } from "./calibrate.js";
 import { CONFIG_FILE, DEFAULT_SLOP_SETTINGS, loadConfig } from "./config.js";
 import { findRepoRoot } from "./git.js";
 import { runPipeline, type PipelineInput } from "./pipeline.js";
@@ -18,6 +19,7 @@ const USAGE = `Usage:
   northstar run "<task>" [--config <file>] [--base <git ref>]
   northstar audit [--commits <n>] [--json]
   northstar bench [--tasks <folder>] [--config <file>]
+  northstar calibrate [--commits <n>] [--config <file>]
   northstar profile
   northstar doctor [--live]
 
@@ -29,6 +31,10 @@ audit    Scores the repo's recent commits with the slop checks. Needs no
 bench    Runs each benchmark task twice from the same commit, once with the
          writer alone and once through the pipeline, and compares the results.
          Tasks are read from benchmark/tasks unless --tasks says otherwise.
+calibrate
+         Shows your reviewer the repo's recent commits, which a person already
+         accepted, and reports how many it would have blocked. Needs only the
+         reviewer agent. Costs one review per commit, 10 commits by default.
 profile  Scans the repo's conventions and writes them to ${PROFILE_FILE}
          for you to review, edit and commit. Your notes are kept on rescans.
 doctor   Shows which agent CLIs are installed. With --live it also asks each
@@ -88,6 +94,28 @@ async function doctor(options: { live?: boolean; config?: string }): Promise<num
   return 0;
 }
 
+/** Says which agent is not ready, so the caller can stop before spending anything on real work. */
+async function agentsAreReady(roles: AgentRole[], cwd: string): Promise<boolean> {
+  const checks = await checkAgents(roles, cwd);
+  const ready = checks.every((check) => check.ready);
+  if (!ready) console.error(`Nothing was started because an agent is not ready.\n\n${renderChecks(checks)}`);
+  return ready;
+}
+
+/** Keeps the report and the data behind it in one folder, and shows the report. */
+async function saveAndPrint(folder: string, report: string, dataFile: string, data: unknown): Promise<void> {
+  await mkdir(folder, { recursive: true });
+  await writeFile(path.join(folder, "report.md"), report);
+  await writeFile(path.join(folder, dataFile), JSON.stringify(data, null, 2));
+  console.log(report);
+}
+
+function parseCommitCount(value: string | undefined, fallback: number): number {
+  const count = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(count) || count < 1) throw new Error("--commits must be a whole number, 1 or more.");
+  return count;
+}
+
 const DEFAULT_TASKS_FOLDER = path.join("benchmark", "tasks");
 
 async function bench(options: { tasks?: string; config?: string }): Promise<number> {
@@ -97,29 +125,35 @@ async function bench(options: { tasks?: string; config?: string }): Promise<numb
   const benchId = newRunId();
 
   // A benchmark with a signed-out agent would spend an hour producing a table of failures.
-  const checks = await checkAgents(configuredRoles(config), repoRoot);
-  if (!checks.every((check) => check.ready)) {
-    console.error(`The benchmark was not started because an agent is not ready.\n\n${renderChecks(checks)}`);
-    return 2;
-  }
+  if (!(await agentsAreReady(configuredRoles(config), repoRoot))) return 2;
   console.error(`Running ${tasks.length} tasks twice each. This uses your agents and can take a while.`);
 
   const results = await runBenchmark({ benchId, repoRoot, config, ...agentsFor(config) }, tasks);
+  await saveAndPrint(path.join(repoRoot, ".northstar", "bench", benchId), renderBenchmark(results), "results.json", results);
+  return 0;
+}
 
-  const report = renderBenchmark(results);
-  const benchDir = path.join(repoRoot, ".northstar", "bench", benchId);
-  await mkdir(benchDir, { recursive: true });
-  await writeFile(path.join(benchDir, "report.md"), report);
-  await writeFile(path.join(benchDir, "results.json"), JSON.stringify(results, null, 2));
-  console.log(report);
+const DEFAULT_CALIBRATION_COMMITS = 10;
+
+async function calibrate(options: { commits?: string; config?: string }): Promise<number> {
+  const maxCommits = parseCommitCount(options.commits, DEFAULT_CALIBRATION_COMMITS);
+  const repoRoot = await findRepoRoot(process.cwd());
+  const config = await loadConfig(options.config ?? path.join(repoRoot, CONFIG_FILE));
+  const reviewer = getAdapter(config.reviewer);
+  const calibrationId = newRunId();
+
+  if (!(await agentsAreReady([{ role: "reviewer", adapter: reviewer, model: config.reviewerModel }], repoRoot))) return 2;
+  console.error(`Reviewing up to ${maxCommits} commits, one review each. This uses your reviewer agent.`);
+
+  const reviews = await calibrateReviewer({ repoRoot, config, reviewer, maxCommits, calibrationId });
+  await saveAndPrint(path.join(repoRoot, ".northstar", "calibrate", calibrationId), renderCalibration(reviews), "results.json", reviews);
   return 0;
 }
 
 const DEFAULT_AUDIT_COMMITS = 30;
 
 async function audit(options: { commits?: string; json?: boolean }): Promise<number> {
-  const maxCommits = options.commits === undefined ? DEFAULT_AUDIT_COMMITS : Number(options.commits);
-  if (!Number.isInteger(maxCommits) || maxCommits < 1) throw new Error("--commits must be a whole number, 1 or more.");
+  const maxCommits = parseCommitCount(options.commits, DEFAULT_AUDIT_COMMITS);
 
   const repoRoot = await findRepoRoot(process.cwd());
   const settings = (await loadConfigIfPresent(path.join(repoRoot, CONFIG_FILE))) ?? DEFAULT_SLOP_SETTINGS;
@@ -150,12 +184,7 @@ async function run(task: string, options: { config?: string; base: string }): Pr
     ...agentsFor(config),
   });
 
-  const report = renderReport(outcome);
-  const runDir = path.join(repoRoot, ".northstar", "runs", outcome.runId);
-  await mkdir(runDir, { recursive: true });
-  await writeFile(path.join(runDir, "report.md"), report);
-  await writeFile(path.join(runDir, "run.json"), JSON.stringify(outcome, null, 2));
-  console.log(report);
+  await saveAndPrint(path.join(repoRoot, ".northstar", "runs", outcome.runId), renderReport(outcome), "run.json", outcome);
   return outcome.status === "passed" ? 0 : 1;
 }
 
@@ -178,6 +207,7 @@ async function main(): Promise<number> {
   if (command === "profile") return profile();
   if (command === "audit") return audit(values);
   if (command === "bench") return bench(values);
+  if (command === "calibrate") return calibrate(values);
   if (command === "run" && task) return run(task, values);
   console.error(USAGE);
   return 2;

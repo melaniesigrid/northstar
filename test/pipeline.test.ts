@@ -293,6 +293,19 @@ describe("runPipeline", () => {
     expect(reviewer.specs[0]?.outputSchema).toHaveProperty("properties.findings");
   });
 
+  it("stops early when the writer answers feedback with the same change again", async () => {
+    const writer = fakeAgent("a", [writeFileTurn("feature.txt", "one\n"), writeFileTurn("feature.txt", "one\n")]);
+    const reviewer = fakeAgent("b", [BLOCKING_REVIEW]);
+
+    const outcome = await runPipeline(pipelineInput(writer, reviewer, { maxIterations: 3 }));
+
+    expect(outcome.status).toBe("needs_human");
+    expect(outcome.attempts).toHaveLength(2);
+    expect(outcome.attempts[1]?.failure).toMatchObject({ stage: "writer", retryable: false });
+    expect(outcome.attempts[1]?.failure?.detail).toContain("exactly the change it made before");
+    expect(reviewer.prompts).toHaveLength(1);
+  });
+
   it("leaves no worktree and no branch behind when the writer fails before changing anything", async () => {
     const signedOut = () => ({ status: "failed" as const, finalMessage: "Authentication error", raw: null });
     const input = pipelineInput(fakeAgent("a", [signedOut]), fakeAgent("b", []));

@@ -43,6 +43,10 @@ The problem itself is well documented. A study of about 300,000 verified commits
 
 - https://www.anthropic.com/engineering/harness-design-long-running-apps
 
+A study of models monitoring their own actions, with code review among its cases, measured the same effect: a model rates an action as more correct and less risky when the action appears as its own earlier turn than when the same action is handed to it as new material to judge. The effect was strongest when the model really had produced the action. Merely telling the model that it wrote something did not cause it. For NorthStar this supports two choices at once: the reviewer should not be the writer's model, and the diff should reach it as material in a fresh run, never as a continuation of the writer's session.
+
+- https://arxiv.org/abs/2603.04582
+
 **How we will test it.** Seed the benchmark with changes that contain known problems and measure how many each reviewer setup catches, and how often it blocks a clean change.
 
 ## 5. An optional planner, with done-when checks
@@ -91,3 +95,40 @@ On prescribing a workflow, the evidence points the other way. One study found th
 **Decision.** Every rule that matters is enforced by a check that runs on the diff. The prompt states the rule so the writer can avoid the rejection, but the pipeline never trusts the writer to have followed it.
 
 **Reasoning.** A weaker model follows instructions less reliably. A gate behaves the same whichever model wrote the code, and that is what lets the quality bar stay fixed while the writer changes.
+
+## 10. The reviewer is measured before it is trusted
+
+**Decision.** `northstar calibrate` replays commits a person already accepted through the reviewer and reports how many it would have blocked. Nothing about the reviewer's strictness is assumed. Its blocks are not filtered or outvoted yet, because no measurement says they need to be.
+
+**Evidence.** Three results point the same way.
+
+A study had five models judge whether code met its written requirement, on more than 1,400 paired correct and buggy solutions. The models rejected correct code often, and the richer the prompt the worse it got: with GPT-4o on one benchmark the false rejection rate went from 26% for a bare verdict to 73% when the model also had to explain and propose a fix. What repaired it was running code. When the proposed fix and the original were both put through tests, average false rejection on that benchmark fell from about 55% to about 16%.
+
+- https://arxiv.org/abs/2603.00539
+
+A benchmark of 1,000 hand-checked pull requests, half of them clean, found that automated review tools were held back mainly by false alarms. The best-scoring setup reached about 17% precision. Nearly half of a sample of false alarms came from the tool not understanding the surrounding code, and another third from over-reacting to a change or from vague feedback. Merging five independent reviews raised that setup's score by about 23%, with little gained beyond five.
+
+- https://arxiv.org/abs/2509.01494
+
+A benchmark of review agents on 1,800 real bugs found the best agent caught about 72% of them, and that agents did up to 25.5% worse on private company code than on open source. Its authors advise against trusting a general score and recommend measuring review agents on the repo they will work in, with a person keeping the final say on changes that matter.
+
+- https://arxiv.org/abs/2610.13668
+
+**What this means for our reviewer.** Our review brief asks for an explanation and a suggested fix with every finding, which is the prompt shape that raised false rejection in the first study. That study used small single-function tasks and partly older models, so it may not carry over. It is a risk to measure, not a reason to change the brief blind. The pipeline already does the part that worked in that study: by the time the reviewer sees a change, the gates have run the tests.
+
+**How we will test it.** Run `northstar calibrate` on each benchmark repo and read every block. If more than about one accepted commit in five is blocked for reasons a person rejects, try in this order: a brief that asks for the verdict first and the explanation only for blocks, then two independent reviews with a block needing both.
+
+## 11. The loop is short and stops when the writer repeats itself
+
+**Decision.** A run gets three attempts by default. The writer starts each attempt as a fresh run that sees the current files and only the latest failure, not the history of earlier attempts. If an attempt produces exactly the change the last one did, the run stops there and goes to a person.
+
+**Evidence.** A study of repair loops across three frontier models and four benchmarks found that the gain is front-loaded, with 53% of all improvement coming from the first repair attempt. It also found that failing runs get stuck: between 38% and 49% of the runs that never recovered produced the same wrong program for all ten attempts. Giving the model the full history of its attempts did not help, and on the hardest benchmark it cost 7.5 points.
+
+- https://icml.cc/virtual/2026/82772
+
+A separate experiment ran code through repeated rounds of model "improvement" with no person in between, and counted 37.6% more critical vulnerabilities after five rounds. More rounds are not free quality. Every attempt can also add problems, which is why each attempt goes through every check again and why the cap is low.
+
+- https://arxiv.org/abs/2506.11022
+
+**How we will test it.** The benchmark records attempts per task. Look at how many passes come on attempt one, two, and three, and how many runs end on a repeated change. If almost nothing passes on attempt three, lower the default to two.
+
