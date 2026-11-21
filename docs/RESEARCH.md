@@ -49,7 +49,7 @@ A study of models monitoring their own actions, with code review among its cases
 
 - https://arxiv.org/abs/2603.04582
 
-**How we will test it.** Seed the benchmark with changes that contain known problems and measure how many each reviewer setup catches, and how often it blocks a clean change. Compare three reviewers on the same changes: Codex on the writer's model, Codex on a second model, and Codex's built-in `codex exec review` with our rubric as its instructions.
+**How we will test it.** `northstar calibrate --seeded` runs the reviewer over small changes that each hold one known problem, with clean versions of the same tasks as controls. It counts how many problems each reviewer setup catches and how often it blocks a clean change. Compare three reviewers on the same changes: Codex on the writer's model, Codex on a second model, and Codex's built-in `codex exec review` with our rubric as its instructions.
 
 ## 5. An optional planner, with done-when checks
 

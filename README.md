@@ -26,6 +26,8 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Weak test signal for the reviewer | |
 | `northstar doctor --live` sign-in check | |
 | `northstar calibrate` for measuring the reviewer on commits you accepted | |
+| `northstar calibrate --seeded` for measuring what the reviewer misses | |
+| `northstar init` to set a repo up from its own scripts | |
 | Duplication gate | |
 | Suppression gate | |
 | AI credit gate | |
@@ -116,7 +118,23 @@ Blocking findings by rule: tests 2, reuse 1.
 
 The numbers above only show the layout. Below the summary comes one row per commit and every finding behind each block. A person accepted all of these commits, so read the blocks and decide which were deserved. A block you agree with is the reviewer doing its job on code that slipped through. A block you disagree with is the reviewer being too strict for this repo.
 
-It needs only the reviewer agent, so you can run it before your writer is set up. It costs one review per commit, skips commits over the line budget, and never touches your checkout. The report is saved under `.northstar/calibrate/<id>/`.
+It costs one review per commit, skips commits over the line budget, and never touches your checkout. The report is saved under `.northstar/calibrate/<id>/`.
+
+### What does the reviewer miss?
+
+Replaying accepted commits shows one kind of error: blocking good work. The other kind is letting a real problem through, and it matters most when one model both writes and reviews.
+
+```bash
+northstar calibrate --seeded
+```
+
+This runs the reviewer over ten small hand-built changes with a known right answer. Seven hold one problem each that the plain checks cannot see: a helper rewritten instead of reused, a test that passes whether or not the code works, new logic with no test, a query inside a loop, a typo fix that also changes a tax rate, and a registry built around one comparison. Three are clean versions of the same tasks.
+
+```text
+The reviewer blocked 6 of 7 changes with a seeded problem, 5 of them under the rule the problem was seeded for. It blocked 0 of 3 clean changes.
+```
+
+Again the numbers only show the layout. The cases are small and obvious on purpose, so a miss is a strong signal and a full score is a weak one. They live in `benchmark/review-cases/` as one Markdown file each. Add your own with `--cases <folder>`: the kinds of mistakes your team actually sees are the best test.
 
 ## Codex is all you need
 
@@ -272,31 +290,31 @@ Requires Node 20 or newer, git, and the Codex CLI, installed and signed in by yo
 npm install
 npm run build
 npm link              # makes the `northstar` command available
-
-northstar doctor      # is Codex installed and signed in? Free
-northstar doctor --live   # does it answer, with the model you configured?
-northstar profile     # scans the repo's conventions into northstar.profile.json
 ```
 
-In the repo you want to work on, add `northstar.config.json`:
+Then, in the repo you want to work on:
+
+```bash
+northstar init        # writes the config, the convention profile, and the .gitignore entry
+northstar doctor      # is Codex installed and signed in? Free
+northstar run "Add a slugify helper to src/strings.ts with tests"
+```
+
+`init` reads `package.json` and turns the repo's own type check, lint, and test scripts into gates, with the install command of whichever package manager the lockfile points to:
 
 ```json
 {
   "setup": ["npm ci"],
   "gates": [
     { "name": "typecheck", "command": "npm run typecheck" },
-    { "name": "test", "command": "npm test" }
+    { "name": "test", "command": "npm run test" }
   ]
 }
 ```
 
-Then run a task:
+It only offers scripts the repo already has, never overwrites an existing config, and tells you what to write by hand when it finds no usable script. Edit the file freely afterwards.
 
-```bash
-northstar run "Add a slugify helper to src/strings.ts with tests"
-```
-
-The report prints to the terminal and is saved with a JSON log under `.northstar/runs/<run id>/`. Add `.northstar/` to that repo's `.gitignore`.
+The report of a run prints to the terminal and is saved with a JSON log under `.northstar/runs/<run id>/`.
 
 Exit codes: `0` the change passed and is committed on its branch, `1` a human needs to look, `2` usage or config error.
 

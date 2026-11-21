@@ -14,14 +14,42 @@ import { formatFindings, parseFindings, requestReview } from "./review.js";
 import { checkSlop, reviewerHints } from "./slop.js";
 import type { AgentAdapter, Config, Finding, Usage } from "./types.js";
 
-export interface CommitReview extends CommitInfo {
-  linesChanged: number;
+/** What the reviewer said about one staged change. */
+export interface Verdict {
   findings: Finding[];
-  /** Whether the reviewer would have stopped this commit. */
+  /** Whether the reviewer would have stopped this change. */
   blocked: boolean;
-  /** Why the commit got no verdict, when it got none. */
+  /** Why the change got no verdict, when it got none. */
   skipped?: string;
   usage?: Usage;
+}
+
+export interface CommitReview extends CommitInfo, Verdict {
+  linesChanged: number;
+}
+
+/**
+ * Reviews whatever is staged in `cwd` with everything a real run would send:
+ * the same brief, the repo's conventions, and the signals from the slop checks.
+ */
+export async function reviewStagedChange(reviewer: AgentAdapter, config: Config, cwd: string, task: string): Promise<Verdict> {
+  const reviewed = await requestReview(reviewer, config, cwd, {
+    task,
+    diff: await stagedDiff(cwd),
+    conventions: (await gatherContext(cwd, task)).conventions,
+    hints: reviewerHints(await checkSlop(cwd, config)),
+  });
+  await discardUnstaged(cwd);
+  const verdict: Verdict = { findings: [], blocked: false, usage: reviewed.usage };
+  if (reviewed.status !== "ok") return { ...verdict, skipped: `The reviewer ended with status "${reviewed.status}".` };
+
+  const parsed = parseFindings(reviewed.finalMessage);
+  if (!parsed.ok) return { ...verdict, skipped: parsed.reason };
+  return {
+    ...verdict,
+    findings: parsed.findings,
+    blocked: parsed.findings.some((finding) => finding.severity === "blocking"),
+  };
 }
 
 export interface CalibrationInput {
@@ -42,25 +70,9 @@ async function reviewCommit(input: CalibrationInput, cwd: string, info: CommitIn
     return { ...review, skipped: `It is over the budget of ${config.maxChangedLines} changed lines, so a run would never reach review.` };
   }
 
-  // The commit message stands in for the task, and everything else is what a real run would send.
+  // The commit message stands in for the task.
   const task = await commitMessage(cwd, info.commit);
-  const reviewed = await requestReview(input.reviewer, config, cwd, {
-    task,
-    diff: await stagedDiff(cwd),
-    conventions: (await gatherContext(cwd, task)).conventions,
-    hints: reviewerHints(await checkSlop(cwd, config)),
-  });
-  await discardUnstaged(cwd);
-  review.usage = reviewed.usage;
-  if (reviewed.status !== "ok") return { ...review, skipped: `The reviewer ended with status "${reviewed.status}".` };
-
-  const parsed = parseFindings(reviewed.finalMessage);
-  if (!parsed.ok) return { ...review, skipped: parsed.reason };
-  return {
-    ...review,
-    findings: parsed.findings,
-    blocked: parsed.findings.some((finding) => finding.severity === "blocking"),
-  };
+  return { ...review, ...(await reviewStagedChange(input.reviewer, config, cwd, task)) };
 }
 
 /**

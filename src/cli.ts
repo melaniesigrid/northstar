@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { randomBytes } from "node:crypto";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { getAdapter, listAdapters } from "./adapters/index.js";
 import { auditCommits, renderAudit } from "./audit.js";
@@ -9,6 +10,7 @@ import { loadTasks, renderBenchmark, runBenchmark } from "./bench.js";
 import { calibrateReviewer, renderCalibration } from "./calibrate.js";
 import { CONFIG_FILE, DEFAULT_AGENT, DEFAULT_SLOP_SETTINGS, loadConfig } from "./config.js";
 import { findRepoRoot } from "./git.js";
+import { suggestConfig, withIgnoreEntry } from "./init.js";
 import { runPipeline, type PipelineInput } from "./pipeline.js";
 import {
   checkAgents,
@@ -21,13 +23,16 @@ import {
 } from "./preflight.js";
 import { loadProfile, PROFILE_FILE, renderConventions, scanRepo } from "./profile.js";
 import { renderReport } from "./report.js";
+import { loadCases, renderCaseResults, reviewCases } from "./review-cases.js";
 import type { Config } from "./types.js";
 
 const USAGE = `Usage:
+  northstar init
   northstar run "<task>" [--config <file>] [--base <git ref>]
   northstar audit [--commits <n>] [--json]
   northstar bench [--tasks <folder>] [--config <file>]
   northstar calibrate [--commits <n>] [--config <file>]
+  northstar calibrate --seeded [--cases <folder>] [--config <file>]
   northstar profile
   northstar doctor [--live]
 
@@ -43,6 +48,11 @@ calibrate
          Shows your reviewer the repo's recent commits, which a person already
          accepted, and reports how many it would have blocked. Needs only the
          reviewer agent. Costs one review per commit, 10 commits by default.
+         With --seeded it reviews small changes that each hold one known
+         problem, plus clean ones, and reports what the reviewer missed.
+init     Sets a repo up: writes ${CONFIG_FILE} with gates taken from the
+         repo's own test, lint and type check scripts, writes the convention
+         profile, and adds .northstar/ to .gitignore. Changes no existing config.
 profile  Scans the repo's conventions and writes them to ${PROFILE_FILE}
          for you to review, edit and commit. Your notes are kept on rescans.
 doctor   Shows which agent CLIs are installed and which of them your setup
@@ -78,8 +88,7 @@ function configuredRoles(config: Config): AgentRole[] {
 }
 
 async function loadConfigIfPresent(file: string): Promise<Config | undefined> {
-  const exists = await access(file).then(() => true, () => false);
-  return exists ? loadConfig(file) : undefined;
+  return (await fileExists(file)) ? loadConfig(file) : undefined;
 }
 
 /** The roles in play: the repo's config when it has one, and the default agent for everything when it has none. */
@@ -161,18 +170,36 @@ async function bench(options: { tasks?: string; config?: string }): Promise<numb
 
 const DEFAULT_CALIBRATION_COMMITS = 10;
 
-async function calibrate(options: { commits?: string; config?: string }): Promise<number> {
+/** The review cases that come with NorthStar, next to its code. */
+const SHIPPED_CASES = fileURLToPath(new URL("../benchmark/review-cases", import.meta.url));
+
+interface CalibrateOptions {
+  commits?: string;
+  config?: string;
+  seeded?: boolean;
+  cases?: string;
+}
+
+async function calibrate(options: CalibrateOptions): Promise<number> {
   const maxCommits = parseCommitCount(options.commits, DEFAULT_CALIBRATION_COMMITS);
   const repoRoot = await findRepoRoot(process.cwd());
   const config = await loadConfig(options.config ?? path.join(repoRoot, CONFIG_FILE));
   const reviewer = getAdapter(config.reviewer);
   const calibrationId = newRunId();
+  const folder = path.join(repoRoot, ".northstar", "calibrate", calibrationId);
 
   if (!(await agentsAreReady([{ role: "reviewer", adapter: reviewer, model: config.reviewerModel }], repoRoot))) return 2;
+  if (options.seeded || options.cases !== undefined) {
+    const cases = await loadCases(options.cases ?? SHIPPED_CASES);
+    console.error(`Reviewing ${cases.length} changes with a known right answer, one review each. This uses your reviewer agent.`);
+    const results = await reviewCases(reviewer, config, cases);
+    await saveAndPrint(folder, renderCaseResults(results), "results.json", results);
+    return 0;
+  }
   console.error(`Reviewing up to ${maxCommits} commits, one review each. This uses your reviewer agent.`);
 
   const reviews = await calibrateReviewer({ repoRoot, config, reviewer, maxCommits, calibrationId });
-  await saveAndPrint(path.join(repoRoot, ".northstar", "calibrate", calibrationId), renderCalibration(reviews), "results.json", reviews);
+  await saveAndPrint(folder, renderCalibration(reviews), "results.json", reviews);
   return 0;
 }
 
@@ -185,6 +212,39 @@ async function audit(options: { commits?: string; json?: boolean }): Promise<num
   const settings = (await loadConfigIfPresent(path.join(repoRoot, CONFIG_FILE))) ?? DEFAULT_SLOP_SETTINGS;
   const report = await auditCommits(repoRoot, settings, maxCommits, newRunId());
   console.log(options.json ? JSON.stringify(report, null, 2) : renderAudit(report));
+  return 0;
+}
+
+const fileExists = (file: string): Promise<boolean> => access(file).then(() => true, () => false);
+
+async function init(): Promise<number> {
+  const repoRoot = await findRepoRoot(process.cwd());
+  const configFile = path.join(repoRoot, CONFIG_FILE);
+  if (await fileExists(configFile)) {
+    console.error(`${CONFIG_FILE} already exists. Nothing was changed.`);
+    return 2;
+  }
+  const manifest = await readFile(path.join(repoRoot, "package.json"), "utf8").then(JSON.parse, () => undefined);
+  const suggestion = suggestConfig(manifest, await readdir(repoRoot));
+  if (suggestion.gates.length === 0) {
+    console.error(
+      `No test, lint or type check script was found in package.json, and NorthStar needs at least one command that fails when the code is wrong.\nWrite ${CONFIG_FILE} by hand, for example:\n\n{ "gates": [{ "name": "test", "command": "<your test command>" }] }`,
+    );
+    return 2;
+  }
+
+  await writeFile(configFile, `${JSON.stringify(suggestion, null, 2)}\n`);
+  if (!(await loadProfile(repoRoot))) {
+    await writeFile(path.join(repoRoot, PROFILE_FILE), `${JSON.stringify(await scanRepo(repoRoot), null, 2)}\n`);
+  }
+  const ignoreFile = path.join(repoRoot, ".gitignore");
+  const ignore = withIgnoreEntry(await readFile(ignoreFile, "utf8").catch(() => ""));
+  if (ignore !== undefined) await writeFile(ignoreFile, ignore);
+
+  const gates = suggestion.gates.map((gate) => `  ${gate.name}: ${gate.command}`).join("\n");
+  console.log(
+    `Wrote ${CONFIG_FILE}. Codex does every role. A change must pass:\n${gates}\n\nYour house rules go under "notes" in ${PROFILE_FILE}.\n\nNext:\n  northstar doctor\n  northstar run "<task>"`,
+  );
   return 0;
 }
 
@@ -225,11 +285,14 @@ async function main(): Promise<number> {
       json: { type: "boolean" },
       tasks: { type: "string" },
       live: { type: "boolean" },
+      seeded: { type: "boolean" },
+      cases: { type: "string" },
     },
   });
   const [command, ...rest] = positionals;
   const task = rest.join(" ").trim();
 
+  if (command === "init") return init();
   if (command === "doctor") return doctor(values);
   if (command === "profile") return profile();
   if (command === "audit") return audit(values);

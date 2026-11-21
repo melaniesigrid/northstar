@@ -39,6 +39,20 @@ What to look at:
 - Each block's findings. Mark every one as deserved or not deserved.
 - Which rules the wrong blocks come from. One rule causing most of them means that rule's wording needs work.
 
+Then the other direction:
+
+```bash
+northstar calibrate --seeded
+```
+
+Ten small changes with a known right answer, one review each. Seven hold one problem the plain checks cannot see and three are clean.
+
+What to look at:
+
+- Anything under "Missed". The cases are obvious on purpose, so a miss means Codex as a reviewer lets that kind of problem through.
+- "Blocked for another reason". The change was stopped, but not for what was wrong with it.
+- Any clean change that was blocked.
+
 ## Step 3: run the benchmark
 
 ```bash
@@ -65,7 +79,7 @@ What to look at:
 | If we see | Then |
 | --- | --- |
 | The reviewer blocks more than about 1 accepted commit in 5 for reasons you reject | Change the review brief before anything else. See `docs/RESEARCH.md`, decision 10. |
-| The reviewer blocks almost nothing, and the benchmark shows it approving changes you would not | One model is going easy on its own style. Try a different `reviewerModel` first, then Codex's built-in `codex exec review` as the reviewer. |
+| The seeded review shows misses, or the benchmark shows the reviewer approving changes you would not | One model is going easy on its own style. Try a different `reviewerModel` first, then Codex's built-in `codex exec review` as the reviewer. |
 | The pipeline is not cleaner than Codex alone on these tasks | The tasks are too easy or the checks are not catching what Codex gets wrong. Read the raw diffs before building more. |
 | The pipeline is cleaner but costs many times more | Look at which role spends it. The planner is the first thing to switch off and compare. |
 | Runs often end on attempt three or on a repeated change | Lower `maxIterations` to 2 and improve the feedback text instead. |

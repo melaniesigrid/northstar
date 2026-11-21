@@ -24,6 +24,14 @@ export async function findRepoRoot(cwd: string): Promise<string> {
   return (await git(cwd, ["rev-parse", "--show-toplevel"])).trim();
 }
 
+/** Turns a folder of files into a repo with one commit, as the starting point for a scratch change. */
+export async function commitBaseline(cwd: string): Promise<void> {
+  await git(cwd, ["init", "--quiet"]);
+  await git(cwd, ["add", "--all"]);
+  const identity = ["-c", "user.name=baseline", "-c", "user.email=baseline@localhost", "-c", "commit.gpgsign=false"];
+  await git(cwd, [...identity, "commit", "--quiet", "--message", "Baseline"]);
+}
+
 /** Each run gets its own branch and working directory, so the user's checkout is never touched. */
 export async function createWorktree(repoRoot: string, runId: string, baseRef: string): Promise<Worktree> {
   const branch = `northstar/${runId}`;
