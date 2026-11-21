@@ -59,6 +59,8 @@ export interface RunOutcome {
   /** Set when the run stopped short with work in it, so a human can inspect that work in place. */
   worktreePath?: string;
   sameVendorReview: boolean;
+  /** The reviewer is the writer's own agent on the same model, so only the fresh run separates them. */
+  sameModelReview: boolean;
   setupFailure?: string;
   /** Existing helpers the writer was pointed to before it started. */
   suggestedHelpers: Helper[];
@@ -216,6 +218,7 @@ export async function runPipeline(input: PipelineInput): Promise<RunOutcome> {
     branch: worktree.branch,
     worktreePath: worktree.path,
     sameVendorReview: input.writer.vendor === input.reviewer.vendor,
+    sameModelReview: input.writer.id === input.reviewer.id && config.writerModel === config.reviewerModel,
     suggestedHelpers: [],
     attempts: [],
   };

@@ -35,19 +35,21 @@ The problem itself is well documented. A study of about 300,000 verified commits
 
 **How we will test it.** Count how often a suggested helper is imported in the result, and whether the duplication gate fires less with suggestions on.
 
-## 4. A separate, skeptical reviewer from another vendor
+## 4. A separate, skeptical reviewer in a fresh run
 
-**Decision.** The agent that wrote the code never grades it. The reviewer runs in a fresh context, read-only, with a brief that tells it to be skeptical and shows examples of what should block a merge.
+**Decision.** The run that wrote the code never grades it. The reviewer is always a new process with a fresh context, read-only, with a brief that tells it to be skeptical and shows examples of what should block a merge. By default it is Codex, the same agent as the writer, so that one signed-in CLI is enough. A different model or a different vendor can be set and is the stronger check.
 
 **Evidence.** Anthropic's write-up on harness design reports that agents tend to praise their own mediocre work, that a separate evaluator is easier to tune toward skepticism than a generator is to critique itself, and that an untuned evaluator would find real issues and then talk itself into approving. Calibrating with examples reduced drift in its scores. They also note the evaluator earns its cost mainly on tasks the model cannot do reliably alone, which is the situation with a weaker writer.
 
 - https://www.anthropic.com/engineering/harness-design-long-running-apps
 
-A study of models monitoring their own actions, with code review among its cases, measured the same effect: a model rates an action as more correct and less risky when the action appears as its own earlier turn than when the same action is handed to it as new material to judge. The effect was strongest when the model really had produced the action. Merely telling the model that it wrote something did not cause it. For NorthStar this supports two choices at once: the reviewer should not be the writer's model, and the diff should reach it as material in a fresh run, never as a continuation of the writer's session.
+A study of models monitoring their own actions, with code review among its cases, measured the same effect: a model rates an action as more correct and less risky when the action appears as its own earlier turn than when the same action is handed to it as new material to judge. The effect was strongest when the model really had produced the action. Merely telling the model that it wrote something did not cause it. For NorthStar this says two things. A reviewer on a different model is the stronger check, which is why the option exists and why the report says which kind of review a change got. And when the reviewer is the same model, what matters most is that the diff reaches it as material in a fresh run, never as a continuation of the writer's session. NorthStar does that in every setup.
+
+**What a Codex-only setup relies on.** The same model shares its own blind spots, and a fresh run does not remove those. So the parts of the pipeline that are plain code carry more of the weight: the gates, the line budget, the slop checks, and the stop on a repeated change give the same verdict whoever wrote the code. The review is a second look, not the guarantee.
 
 - https://arxiv.org/abs/2603.04582
 
-**How we will test it.** Seed the benchmark with changes that contain known problems and measure how many each reviewer setup catches, and how often it blocks a clean change.
+**How we will test it.** Seed the benchmark with changes that contain known problems and measure how many each reviewer setup catches, and how often it blocks a clean change. Compare three reviewers on the same changes: Codex on the writer's model, Codex on a second model, and Codex's built-in `codex exec review` with our rubric as its instructions.
 
 ## 5. An optional planner, with done-when checks
 
@@ -88,7 +90,7 @@ On prescribing a workflow, the evidence points the other way. One study found th
 
 **Decision.** Planner, writer, and reviewer are separate runs that NorthStar starts, each with its own context and permissions.
 
-**Reasoning.** Both Codex and Claude Code can spawn their own subagents. Those live inside one vendor's tool, share its judgment, and cannot be a different vendor. Running roles as separate processes is what makes cross-vendor review possible and keeps the reviewer from seeing the writer's reasoning.
+**Reasoning.** Codex can spawn its own subagents, but those share one session's history and judgment. A separate process starts with nothing but what NorthStar hands it, which is the condition under which a model judges its own work most fairly (decision 4). It also means any role can be moved to another model or another vendor by changing one line of config.
 
 ## 9. Checks decide, prompts only ask
 

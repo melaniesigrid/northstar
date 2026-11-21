@@ -346,7 +346,7 @@ describe("runPipeline", () => {
     expect(writer.prompts).toEqual([]);
   });
 
-  it("flags a review done by the writer's own vendor", async () => {
+  it("says so when one agent on one model both writes and reviews", async () => {
     const input = pipelineInput(
       fakeAgent("same", [writeFileTurn("feature.txt", "hello\n")]),
       fakeAgent("same", [CLEAN_REVIEW]),
@@ -354,6 +354,21 @@ describe("runPipeline", () => {
 
     const outcome = await runPipeline(input);
 
-    expect(outcome.sameVendorReview).toBe(true);
+    expect(outcome.status).toBe("passed");
+    expect(outcome).toMatchObject({ sameVendorReview: true, sameModelReview: true });
+    expect(renderReport(outcome)).toContain("Review: by the same agent and model as the writer, in a separate read-only run");
+  });
+
+  it("tells a second model of the same agent apart from the same model", async () => {
+    const input = pipelineInput(
+      fakeAgent("same", [writeFileTurn("feature.txt", "hello\n")]),
+      fakeAgent("same", [CLEAN_REVIEW]),
+      { reviewerModel: "another-model" },
+    );
+
+    const outcome = await runPipeline(input);
+
+    expect(outcome).toMatchObject({ sameVendorReview: true, sameModelReview: false });
+    expect(renderReport(outcome)).toContain("Review: by the writer's vendor on a different model");
   });
 });

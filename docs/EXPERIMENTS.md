@@ -11,6 +11,22 @@ Each entry answers four questions:
 
 Record failures and dead ends too. They are the most useful entries later.
 
+## 2026-11-20: Codex for every role, run against the real Codex binary
+
+**Question.** NorthStar must run on Codex alone. Does anything in it still need a second agent, and how does the real Codex CLI behave in each role when nobody is signed in?
+
+**Method.** Made `writer` and `reviewer` default to `codex`, moved this repo's own config to Codex for all three roles, and ran `doctor`, `doctor --live`, and `run` in a throwaway repo against Codex CLI 0.171.0 with no sign-in and no route to the API.
+
+**Result.** Nothing in the pipeline needed a second agent. The adapter's planner and reviewer arguments (read-only sandbox, output schema) had already been checked against this binary. Three findings:
+
+- A signed-out Codex with no network does not fail. It prints reconnect notices and waits. The first `run` sat in the planner call until it was killed, and would have waited 15 minutes per call. This would have been the first thing a new user met.
+- `codex login status` answers at once, with exit code 1 and "Not logged in". NorthStar now asks it before `run`, `bench`, and `calibrate`, and in plain `doctor`. No model call is made. When it says no, one 20-second probe still runs, because a key in the environment can work without a stored sign-in. The same run now stops in 20 seconds with "No sign-in is stored. Run `codex login`."
+- A Codex call that times out now reports the last thing Codex said, since "timed out" alone hid the cause.
+
+Also found: this Codex version has `codex exec review`, a built-in review mode that takes custom instructions and can review staged changes. Its output format could not be seen without a sign-in, so it is not used.
+
+**Next.** With one model as writer and reviewer, the open question is whether the reviewer goes easy on its own style. Calibration measures the opposite error, blocking good work. The benchmark needs seeded bad changes to measure misses. Then compare the same-model reviewer, a second Codex model, and `codex exec review`.
+
 ## 2026-11-20: Complexity estimate replayed on six repos
 
 **Question.** Can cognitive complexity be estimated well enough without a parser to be worth showing the reviewer, and how often would it fire?

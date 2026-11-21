@@ -45,15 +45,21 @@ function renderResult(outcome: RunOutcome): string {
   return `NEEDS A HUMAN. Nothing was committed. ${where}`;
 }
 
+/** Says how far apart the writer and the reviewer were, since that is how much the review is worth. */
+function describeReviewer(outcome: RunOutcome): string {
+  if (!outcome.sameVendorReview) return "by a different vendor from the writer.";
+  const separateRun = "in a separate read-only run that never saw the writer's session";
+  if (!outcome.sameModelReview) return `by the writer's vendor on a different model, ${separateRun}.`;
+  return `by the same agent and model as the writer, ${separateRun}. A different model would be a stronger check. The gates and slop checks do not depend on any model.`;
+}
+
 export function renderReport(outcome: RunOutcome): string {
-  const review = outcome.sameVendorReview
-    ? "same vendor as the writer, which is a weaker check"
-    : "a different vendor from the writer";
+  const review = describeReviewer(outcome);
   const sections = [
     `# NorthStar run ${outcome.runId}`,
     `Task: ${outcome.task}`,
     `Result: ${renderResult(outcome)}`,
-    `Review: ${review}.`,
+    `Review: ${review}`,
   ];
   if (outcome.setupFailure) sections.push(outcome.setupFailure);
   if (outcome.plan) sections.push(`Plan given to the writer:\n${outcome.plan}`);

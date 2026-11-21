@@ -19,11 +19,13 @@ Add `.northstar/` to `.gitignore` in any repo you run this in.
 northstar doctor --live
 ```
 
-Every configured agent should say `ready`. If one says `NOT READY`, the line carries the vendor's own message. The usual causes are a CLI that is signed out or a model name the account cannot use.
+Codex should say `ready`. If it says `NOT READY`, the line carries the reason. The usual causes are a CLI that is signed out, which `codex login` fixes, or a model name the account cannot use.
 
-## Step 2: measure the reviewer (needs Claude Code only)
+Nothing here needs any agent other than Codex. The repo's own `northstar.config.json` gives every role to it.
 
-This step does not use Codex, so it can run first.
+## Step 2: measure the reviewer
+
+This is the cheapest real test, and with one model doing both jobs it matters most: it shows how Codex as a reviewer treats work that a person already accepted.
 
 ```bash
 northstar calibrate
@@ -37,7 +39,7 @@ What to look at:
 - Each block's findings. Mark every one as deserved or not deserved.
 - Which rules the wrong blocks come from. One rule causing most of them means that rule's wording needs work.
 
-## Step 3: run the benchmark (needs Codex and Claude Code)
+## Step 3: run the benchmark
 
 ```bash
 northstar bench
@@ -63,6 +65,7 @@ What to look at:
 | If we see | Then |
 | --- | --- |
 | The reviewer blocks more than about 1 accepted commit in 5 for reasons you reject | Change the review brief before anything else. See `docs/RESEARCH.md`, decision 10. |
+| The reviewer blocks almost nothing, and the benchmark shows it approving changes you would not | One model is going easy on its own style. Try a different `reviewerModel` first, then Codex's built-in `codex exec review` as the reviewer. |
 | The pipeline is not cleaner than Codex alone on these tasks | The tasks are too easy or the checks are not catching what Codex gets wrong. Read the raw diffs before building more. |
 | The pipeline is cleaner but costs many times more | Look at which role spends it. The planner is the first thing to switch off and compare. |
 | Runs often end on attempt three or on a repeated change | Lower `maxIterations` to 2 and improve the feedback text instead. |

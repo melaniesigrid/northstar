@@ -1,6 +1,8 @@
 # NorthStar
 
-An agent-agnostic quality pipeline for coding agents. Any supported agent writes the code, hard gates check it, and a second agent from a different vendor reviews it. Only a change that clears both is committed.
+A quality pipeline for coding agents. An agent writes the code, hard gates check it, and a separate read-only run reviews it. Only a change that clears both is committed.
+
+It runs on Codex alone. Other agents sit behind the same interface and are optional.
 
 It is built to lift a weaker writer. The checks, the plan, and the review do not care which model wrote the code, so the standard stays the same when the writer is the cheaper or weaker agent.
 
@@ -13,7 +15,7 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Built | Not built yet |
 | --- | --- |
 | Isolated git worktree per run | Convention rules proposed by an agent |
-| Claude Code and Codex adapters behind one interface | Benchmark results from a live run |
+| Codex for every role by default, other agents optional | Benchmark results from a live run |
 | Setup commands and configurable hard gates | Writer rebuttal round |
 | Line budget check | Pull request creation |
 | Convention profile and reuse search | |
@@ -28,7 +30,7 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 | Suppression gate | |
 | AI credit gate | |
 | Unreferenced symbol signal for the reviewer | |
-| Cross-vendor review with structured findings | |
+| Review in a separate read-only run, with structured findings | |
 | Retry loop with exact feedback, capped attempts | |
 | Run report and JSON audit log | |
 
@@ -116,16 +118,15 @@ The numbers above only show the layout. Below the summary comes one row per comm
 
 It needs only the reviewer agent, so you can run it before your writer is set up. It costs one review per commit, skips commits over the line budget, and never touches your checkout. The report is saved under `.northstar/calibrate/<id>/`.
 
-## Using NorthStar with Codex
+## Codex is all you need
 
-A good setup when Codex is your everyday writer and you also have Claude Code:
+Every role is done by Codex unless your config names another agent. One signed-in `codex` CLI runs the whole pipeline: planning, writing, and review. No second tool has to be installed.
 
 ```json
 {
-  "writer": "codex",
-  "planner": "claude-code",
-  "reviewer": "claude-code",
+  "planner": "codex",
   "writerEffort": "high",
+  "reviewerEffort": "high",
   "setup": ["npm ci"],
   "gates": [
     { "name": "typecheck", "command": "npm run typecheck" },
@@ -134,17 +135,27 @@ A good setup when Codex is your everyday writer and you also have Claude Code:
 }
 ```
 
-What this does for a weaker writer:
+`writer` and `reviewer` default to `codex`, so the config does not need to name them. The planner is optional and off unless you set it.
 
-- **The planner thinks first.** It reads the repo and decides which files change, what to reuse, which tests to add, and what "done" means. The writer spends its effort on writing.
-- **The brief is short.** Codex's own guidance is that coding models do worse when over-prompted, so the writer gets the task, the plan, your rules, and its limits, and little else.
-- **Nothing is a surprise.** The writer is told the exact commands it will be checked with and may run them itself before it finishes.
-- **The judge is not the author.** A second vendor reviews with a skeptical brief and concrete examples of what blocks a merge. Findings come back as structured output, so a chatty reply cannot break the run.
-- **Rejections are exact.** A failed check returns the file, the line, and the reason, which is the feedback a weaker model needs to fix a problem in one more try.
+What the pipeline adds to Codex working alone:
 
-With Codex alone, set `reviewer` to `codex` and give it a different `reviewerModel` or a higher `reviewerEffort`. The run works, and the report says the review came from the writer's own vendor.
+- **A plan first.** A read-only Codex run reads the repo and decides which files change, what to reuse, which tests to add, and what "done" means. The writer spends its effort on writing.
+- **A short brief.** Codex's own guidance is that coding models do worse when over-prompted, so the writer gets the task, the plan, your rules, and its limits, and little else.
+- **No surprises.** The writer is told the exact commands it will be checked with and may run them itself before it finishes.
+- **Checks that no model can argue with.** The gates, the line budget, and the slop checks are plain code. They give the same verdict whoever wrote the change, and they run before any review.
+- **A review in a fresh run.** The reviewer is a new Codex process, read-only, that never saw the writer's session. It gets the diff as something handed to it, with a skeptical brief and concrete examples of what blocks a merge. Findings come back as structured output, so a chatty reply cannot break the run.
+- **Exact rejections.** A failed check returns the file, the line, and the reason, which is what a model needs to fix a problem in one more try.
 
-Codex runs the writer in its workspace sandbox, which has no network by default. Put dependency installs in `setup`, which runs before the writer starts.
+### What one model reviewing its own work is worth
+
+Less than a different model, and more than nothing. The bias toward approval that research measures in models judging their own output comes from the work appearing as the model's own earlier turn. Handed the same work as new material in a separate context, a model judges it more strictly (`docs/RESEARCH.md`, decision 4). What a fresh run cannot remove is the blind spots a model shares with itself. That is how NorthStar's reviewer always runs. The run report says plainly which kind of review a change got.
+
+Two things make a Codex-only review stronger, both optional:
+
+- Set `reviewerModel` to a different model than the writer uses, if your Codex plan has one.
+- Measure it. `northstar calibrate` shows how the reviewer treats commits you already accepted.
+
+If you later add a second agent, set `"reviewer": "claude-code"` and nothing else changes.
 
 ## Conventions and reuse
 
@@ -255,15 +266,15 @@ Default exports, `main`, and test functions are skipped.
 
 ## Quick start
 
-Requires Node 20 or newer, git, and the agent CLIs you plan to use, each installed and signed in by you.
+Requires Node 20 or newer, git, and the Codex CLI, installed and signed in by you (`codex login`).
 
 ```bash
 npm install
 npm run build
 npm link              # makes the `northstar` command available
 
-northstar doctor      # shows which agent CLIs are installed
-northstar doctor --live   # also checks that each one is signed in
+northstar doctor      # is Codex installed and signed in? Free
+northstar doctor --live   # does it answer, with the model you configured?
 northstar profile     # scans the repo's conventions into northstar.profile.json
 ```
 
@@ -271,8 +282,6 @@ In the repo you want to work on, add `northstar.config.json`:
 
 ```json
 {
-  "writer": "claude-code",
-  "reviewer": "codex",
   "setup": ["npm ci"],
   "gates": [
     { "name": "typecheck", "command": "npm run typecheck" },
@@ -295,30 +304,37 @@ A run that stops for a human leaves its worktree in place so you can read the wo
 
 ### Check that your agents are signed in
 
-A CLI can be installed and still be signed out, and nothing shows it until the first model call. Claude Code, for one, exits 0 and labels the result a success while the answer is an authentication error.
+A CLI can be installed and still be signed out. A signed-out Codex with no network does not fail: it waits, and a run would sit there until its time limit.
+
+```bash
+northstar doctor
+```
+
+```text
+claude-code: not installed, and not needed by your setup
+codex: installed (codex-cli 0.171.0), NOT SIGNED IN. No sign-in is stored. Run `codex login`.
+```
+
+This check is free. It asks Codex for its own login status and makes no model call. `northstar run` does the same before it starts, so a signed-out run stops in seconds with the fix instead of waiting.
 
 ```bash
 northstar doctor --live
 ```
 
 ```text
-claude-code: installed (2.1.330 (Claude Code))
-codex: installed (codex-cli 0.171.0)
-
-codex (writer): ready
-claude-code (planner, reviewer): NOT READY. Authentication error
+codex (planner, writer, reviewer): ready
 ```
 
-It asks each agent for a one-word answer, read-only, with the model your config names, so a mistyped model name shows up here too. Roles that share an agent and a model are checked with one call. In a repo without a config it checks every installed agent. It exits 1 when any agent is not ready.
+`--live` goes one step further and asks each agent in use for a one-word answer, read-only, with the model your config names. That proves the sign-in works and that the model name is accepted. Roles that share an agent and a model are checked with one call. It exits 1 when any agent is not ready.
 
-`northstar bench` runs the same check before its first task and refuses to start when an agent is not ready, because a benchmark with a signed-out agent would spend its whole run producing a table of failures.
+`northstar bench` and `northstar calibrate` run the live check before they spend anything, because a benchmark with an agent that cannot answer would produce a table of failures.
 
 ## Config reference
 
 | Key | Required | Default | Meaning |
 | --- | --- | --- | --- |
-| `writer` | yes | | Agent that writes: `claude-code` or `codex` |
-| `reviewer` | yes | | Agent that reviews. Pick a different vendor from the writer |
+| `writer` | no | `codex` | Agent that writes: `codex` or `claude-code` |
+| `reviewer` | no | `codex` | Agent that reviews, always in its own read-only run |
 | `planner` | no | none | Agent that plans before the writer starts |
 | `gates` | yes | | List of `{ "name", "command" }`. At least one |
 | `setup` | no | `[]` | Commands run once in the fresh worktree |
@@ -334,11 +350,11 @@ It asks each agent for a one-word answer, read-only, with the model your config 
 
 Gates should check, not fix. Anything a gate writes is dropped, so use `prettier --check` rather than `prettier --write`.
 
-If writer and reviewer share a vendor, the run still works and the report says the review was a weaker check.
+The run report states how far apart the writer and reviewer were: a different vendor, a different model of the same vendor, or the same model in a separate run.
 
 ## Credentials
 
-NorthStar never reads, stores, or forwards credentials. It starts the vendor's own unmodified CLI, which uses whatever sign-in or API key you set up for it. Each vendor bills you directly.
+NorthStar never reads, stores, or forwards credentials. It starts the vendor's own unmodified CLI, which uses whatever sign-in or API key you set up for it. The sign-in check asks the CLI whether a sign-in exists and looks only at the yes or no. Each vendor bills you directly.
 
 ## Adding an agent
 

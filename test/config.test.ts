@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config.js";
 
 const MINIMAL = {
-  writer: "claude-code",
-  reviewer: "codex",
   gates: [{ name: "test", command: "npm test" }],
 };
 
@@ -32,10 +30,19 @@ describe("parseConfig", () => {
     expect(parseConfig(MINIMAL).writerConventions).toBe("notes");
   });
 
+  it("gives every role to Codex when the config names no agent, and adds no planner", () => {
+    expect(parseConfig(MINIMAL)).toMatchObject({ writer: "codex", reviewer: "codex" });
+    expect(parseConfig(MINIMAL).planner).toBeUndefined();
+  });
+
+  it("keeps the agents a config does name", () => {
+    expect(parseConfig({ ...MINIMAL, reviewer: "claude-code" })).toMatchObject({ writer: "codex", reviewer: "claude-code" });
+  });
+
   it.each([
     ["an unknown effort level", { ...MINIMAL, writerEffort: "extreme" }, '"writerEffort"'],
     ["an unknown conventions mode", { ...MINIMAL, writerConventions: "some" }, '"writerConventions"'],
-    ["no writer", { ...MINIMAL, writer: undefined }, '"writer"'],
+    ["an empty writer", { ...MINIMAL, writer: "" }, '"writer"'],
     ["no gates", { ...MINIMAL, gates: [] }, '"gates"'],
     ["a gate without a command", { ...MINIMAL, gates: [{ name: "test" }] }, '"command"'],
     ["a zero iteration limit", { ...MINIMAL, maxIterations: 0 }, '"maxIterations"'],

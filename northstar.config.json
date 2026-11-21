@@ -1,8 +1,9 @@
 {
   "writer": "codex",
-  "planner": "claude-code",
-  "reviewer": "claude-code",
+  "planner": "codex",
+  "reviewer": "codex",
   "writerEffort": "high",
+  "reviewerEffort": "high",
   "setup": [
     "npm ci"
   ],

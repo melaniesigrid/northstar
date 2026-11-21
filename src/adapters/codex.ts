@@ -79,10 +79,20 @@ export function buildCodexArgs(spec: RunSpec, files: { lastMessage: string; sche
   return args;
 }
 
+/** Codex waits for the network without a limit, so its last words are the only clue to why time ran out. */
+function describeTimeout(parsed: RunResult): string {
+  const lastWords = parsed.status === "failed" ? ` Its last message was: ${parsed.finalMessage}` : "";
+  return `Codex timed out.${lastWords}`;
+}
+
 export const codex: AgentAdapter = {
   id: "codex",
   vendor: "openai",
   detect: () => detectCli(CLI),
+  async signInProblem() {
+    const status = await exec(CLI, ["login", "status"], { timeoutMs: 10_000 });
+    return status.exitCode === 0 ? undefined : "No sign-in is stored. Run `codex login`.";
+  },
   async run(spec: RunSpec): Promise<RunResult> {
     const outputDir = await mkdtemp(path.join(os.tmpdir(), "northstar-codex-"));
     const files = {
@@ -97,7 +107,9 @@ export const codex: AgentAdapter = {
         input: spec.prompt,
       });
       const lastMessage = await readFile(files.lastMessage, "utf8").catch(() => "");
-      return launchFailure(result, "Codex") ?? parseCodexEvents(result.stdout, lastMessage, result.exitCode);
+      const parsed = parseCodexEvents(result.stdout, lastMessage, result.exitCode);
+      if (result.timedOut) return { ...parsed, status: "timeout", finalMessage: describeTimeout(parsed) };
+      return launchFailure(result, "Codex") ?? parsed;
     } finally {
       await rm(outputDir, { recursive: true, force: true });
     }
