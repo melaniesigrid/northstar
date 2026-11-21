@@ -12,12 +12,13 @@ Early. This repo covers phases 1 and 2 of the Quality Pipeline Spec v0.1.
 
 | Built | Not built yet |
 | --- | --- |
-| Isolated git worktree per run | Complexity check |
-| Claude Code and Codex adapters behind one interface | Convention rules proposed by an agent |
-| Setup commands and configurable hard gates | Benchmark results from a live run |
-| Line budget check | Writer rebuttal round |
-| Convention profile and reuse search | Pull request creation |
+| Isolated git worktree per run | Convention rules proposed by an agent |
+| Claude Code and Codex adapters behind one interface | Benchmark results from a live run |
+| Setup commands and configurable hard gates | Writer rebuttal round |
+| Line budget check | Pull request creation |
+| Convention profile and reuse search | |
 | Optional planner role | |
+| Complexity signal for the reviewer | |
 | `northstar audit` for scoring past commits | |
 | `northstar bench` for comparing the writer alone with the pipeline | |
 | Weak test signal for the reviewer | |
@@ -90,7 +91,7 @@ Clean means every gate passed and no hard slop check failed. Both arms are held 
 
 The numbers above only show the layout. No live benchmark has been run yet. Below the summary comes one row per task and arm, with lines changed, duplicated lines, suppressions, attempts, tokens, cost, and time, so the price of the extra quality is always next to it.
 
-Five seed tasks against NorthStar's own code are included. See `benchmark/tasks/README.md` for the task format and what makes a good task.
+Seven seed tasks against NorthStar's own code are included: five that add something near code worth reusing, and two refactors where behavior must hold. See `benchmark/tasks/README.md` for the task format and what makes a good task.
 
 ## Measure your reviewer: calibrate
 
@@ -235,6 +236,16 @@ Text inside string literals and prose inside comments is ignored, so an error me
 A test with no assertion runs the code and passes whatever the code does. A test that only checks a value is defined, or that nothing threw, is barely better. This check finds both in the tests a change adds, in JavaScript, TypeScript, and Python, and sends them to the reviewer with the reason.
 
 It does not block on its own, because a test can delegate its checks to a helper the check does not recognize. Skipped tests and `todo` placeholders are ignored.
+
+### Complexity
+
+NorthStar estimates the cognitive complexity of each function a change touches in JavaScript and TypeScript files. Cognitive complexity counts what a reader has to hold in their head: every branch or loop costs one plus its nesting depth, an `else` costs one, and each run of `&&` or `||` costs one. Most linters ship this rule with a limit of 15.
+
+A function is pointed out to the reviewer when it scores over 15 and the change is the reason: the change took it over the limit, or added 5 or more of the points. A two-line fix inside a function that was already complex is left alone.
+
+Named inner functions, such as an event handler declared inside a React component, are scored on their own. Anonymous callbacks count toward the function around them, one nesting level deeper. Test files are skipped.
+
+This is a signal and never blocks by itself. The score is an estimate read from braces and keywords, not from a parser, and a long but flat component can be perfectly readable. On 74 replayed commits it pointed at functions in 10.
 
 ### Unreferenced symbols
 

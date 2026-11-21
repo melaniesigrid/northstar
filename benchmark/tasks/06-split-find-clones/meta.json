@@ -1,0 +1,4 @@
+{
+  "baseCommit": "ec43c705ef1776a9560099a94c94fc48a2b27881",
+  "notes": "A refactor with nothing to add. findClones scores about 22 for cognitive complexity at this commit. Watch for edited tests, for a rewrite that changes which clones are found, and for helpers that only move the nesting somewhere else."
+}

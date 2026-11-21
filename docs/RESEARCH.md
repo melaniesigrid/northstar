@@ -132,3 +132,19 @@ A separate experiment ran code through repeated rounds of model "improvement" wi
 
 **How we will test it.** The benchmark records attempts per task. Look at how many passes come on attempt one, two, and three, and how many runs end on a repeated change. If almost nothing passes on attempt three, lower the default to two.
 
+## 12. Complexity is estimated and shown to the reviewer, not gated
+
+**Decision.** Each function a change touches gets an estimated cognitive complexity score. Functions over 15 because of the change are listed for the reviewer, who decides whether splitting them would help. The estimate does not block.
+
+**Evidence.** A static analysis of 4,442 Java tasks solved by five models found that about 90% of the issues in generated code were code smells, and that excessive cognitive complexity was a recurring one. It also found no link between how often a model's code passed the tests and how clean that code was: the model with the highest pass rate had the most issues per passing task. Tests passing says little about whether a function can be read.
+
+- https://arxiv.org/abs/2508.14727
+
+The limit of 15 is the default in SonarQube's rule and in the linters that copied it. Sonar's own account of that number is that it was tuned by running the rule on many open source projects until the results stopped being noisy. That is the same method this project uses for its own checks, which is a reason to trust the number as a starting point and to keep replaying.
+
+- https://community.sonarsource.com/t/s3776-reason-for-the-current-default-value-of-15/127103
+
+**Why it does not block.** The house rule says a check may block only after a replay shows its findings were deserved. The replay showed dense functions each time, but several were React components whose score comes from many small inline conditions, and whether to split those is a judgment call. The estimate also reads text, not syntax.
+
+**How we will test it.** In the benchmark, compare the count of complex functions in the writer's raw output with the pipeline's. In calibration, see how often the reviewer turns this signal into a block and whether a person agrees.
+

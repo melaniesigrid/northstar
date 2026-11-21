@@ -1,5 +1,6 @@
 import { isTestFile } from "./profile.js";
 import type { ChangeSnapshot } from "./snapshot.js";
+import { templateTextLines } from "./source-lines.js";
 
 export interface WeakTest {
   file: string;
@@ -38,11 +39,16 @@ function testStart(line: string): TestStart | undefined {
 
 const indentOf = (line: string): number => line.length - line.trimStart().length;
 
-/** The test's own line plus every following line indented deeper than it. */
-function testBody(lines: string[], startIndex: number, indent: number): string[] {
+/**
+ * The test's own line plus every following line indented deeper than it. Text
+ * inside a template literal is skipped over, since a fixture written at the
+ * left margin would otherwise look like the end of the test.
+ */
+function testBody(lines: string[], startIndex: number, indent: number, templateText: Set<number>): string[] {
   const body = [lines[startIndex] ?? ""];
-  for (const line of lines.slice(startIndex + 1)) {
-    if (line.trim() === "") continue;
+  for (let index = startIndex + 1; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    if (line.trim() === "" || templateText.has(index + 1)) continue;
     if (indentOf(line) <= indent) break;
     body.push(line);
   }
@@ -67,9 +73,10 @@ export function findWeakTests({ files, addedLines }: ChangeSnapshot): WeakTest[]
     const content = files.get(file);
     if (content === undefined || !isTestFile(file)) continue;
     const lines = content.split("\n");
+    const templateText = templateTextLines(content);
     lines.forEach((line, index) => {
       const start = added.has(index + 1) ? testStart(line) : undefined;
-      const weakness = start && weaknessOf(testBody(lines, index, start.indent));
+      const weakness = start && weaknessOf(testBody(lines, index, start.indent, templateText));
       if (start && weakness) weakTests.push({ file, line: index + 1, name: start.name, weakness });
     });
   }
