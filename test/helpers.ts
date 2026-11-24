@@ -34,6 +34,20 @@ export function newRunId(): string {
   return `test-${randomBytes(4).toString("hex")}`;
 }
 
+/**
+ * Gate commands built on node, so they mean the same thing under sh and under cmd.exe.
+ * `test`, `grep` and `true` are not available on Windows.
+ */
+export function fileExistsGate(file: string): string {
+  return `node -e "process.exit(require('fs').existsSync('${file}') ? 0 : 1)"`;
+}
+
+export function fileContainsGate(file: string, text: string): string {
+  return `node -e "process.exit(require('fs').readFileSync('${file}', 'utf8').includes('${text}') ? 0 : 1)"`;
+}
+
+export const ALWAYS_PASSES_GATE = 'node -e "process.exit(0)"';
+
 export function testConfig(overrides: Partial<Config> = {}): Config {
   return {
     writer: "fake-writer",
@@ -44,7 +58,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     minDuplicateLines: 5,
     maxNewSuppressions: 0,
     setup: [],
-    gates: [{ name: "exists", command: "test -f feature.txt" }],
+    gates: [{ name: "exists", command: fileExistsGate("feature.txt") }],
     agentTimeoutMs: 10_000,
     gateTimeoutMs: 10_000,
     ...overrides,

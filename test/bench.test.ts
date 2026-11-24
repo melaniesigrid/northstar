@@ -2,7 +2,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadTasks, renderBenchmark, runBenchmark, type BenchInput, type BenchTask } from "../src/bench.js";
-import { CLEAN_REVIEW, createTempRepo, fakeAgent, gitIn, newRunId, SLUGIFY_SOURCE, testConfig, writeFileTurn } from "./helpers.js";
+import {
+  ALWAYS_PASSES_GATE,
+  CLEAN_REVIEW,
+  createTempRepo,
+  fakeAgent,
+  fileExistsGate,
+  gitIn,
+  newRunId,
+  SLUGIFY_SOURCE,
+  testConfig,
+  writeFileTurn,
+} from "./helpers.js";
 
 /** A repo that already has a slugify helper, which a careless change might copy. */
 function repoWithHelper(): string {
@@ -20,7 +31,7 @@ function benchInput(repoRoot: string, writerTurns: Parameters<typeof fakeAgent>[
   return {
     benchId: newRunId(),
     repoRoot,
-    config: testConfig({ gates: [{ name: "exists", command: "test -f feature.ts" }] }),
+    config: testConfig({ gates: [{ name: "exists", command: fileExistsGate("feature.ts") }] }),
     writer: fakeAgent("a", writerTurns),
     reviewer: fakeAgent("b", Array.from({ length: reviews }, () => CLEAN_REVIEW)),
   };
@@ -53,7 +64,7 @@ describe("runBenchmark", () => {
 
   it("counts a writer that changes nothing as not clean", async () => {
     const input = benchInput(repoWithHelper(), [() => "done", importsTheHelper], 1);
-    input.config = testConfig({ gates: [{ name: "always", command: "true" }] });
+    input.config = testConfig({ gates: [{ name: "always", command: ALWAYS_PASSES_GATE }] });
 
     const [result] = await runBenchmark(input, [TASK]);
 
