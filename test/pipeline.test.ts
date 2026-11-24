@@ -8,6 +8,8 @@ import {
   CLEAN_REVIEW,
   createTempRepo,
   fakeAgent,
+  fileContainsGate,
+  fileExistsGate,
   gitIn,
   newRunId,
   SLUGIFY_SOURCE,
@@ -63,7 +65,7 @@ describe("runPipeline", () => {
       writeFileTurn("feature.txt", "fixed\n"),
     ]);
     const input = pipelineInput(writer, fakeAgent("b", [CLEAN_REVIEW]), {
-      gates: [{ name: "content", command: "grep -q fixed feature.txt" }],
+      gates: [{ name: "content", command: fileContainsGate("feature.txt", "fixed") }],
     });
 
     const outcome = await runPipeline(input);
@@ -288,7 +290,7 @@ describe("runPipeline", () => {
 
     await runPipeline(pipelineInput(writer, reviewer, { writerEffort: "high" }));
 
-    expect(writer.specs[0]).toMatchObject({ readOnly: false, effort: "high", allowedCommands: ["test -f feature.txt"] });
+    expect(writer.specs[0]).toMatchObject({ readOnly: false, effort: "high", allowedCommands: [fileExistsGate("feature.txt")] });
     expect(reviewer.specs[0]).toMatchObject({ readOnly: true });
     expect(reviewer.specs[0]?.outputSchema).toHaveProperty("properties.findings");
   });
